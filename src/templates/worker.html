@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #f5f7fb;
+      }
+      .header {
+        padding: 30px;
+        background: linear-gradient(90deg, #1c37ca, #3d68ff);
+        color: white;
+        border-bottom-left-radius: 20px;
+        border-bottom-right-radius: 20px;
+      }
+      .header h2 {
+        margin: 0;
+        font-size: 26px;
+        font-weight: 500;
+      }
+      .top-cards {
+        display: flex;
+        gap: 20px;
+        margin-top: 20px;
+      }
+      .top-card {
+        flex: 1;
+        background: rgba(255, 255, 255, 0.15);
+        padding: 20px;
+        border-radius: 12px;
+        color: #fff;
+        backdrop-filter: blur(6px);
+      }
+      .top-card h3 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 400;
+      }
+      .top-card p {
+        margin-top: 10px;
+        font-size: 22px;
+        font-weight: bold;
+      }
+
+      .container {
+        padding: 30px;
+        margin-top: -20px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 25px;
+      }
+
+      .box {
+        background: #fff;
+        padding: 35px;
+        border-radius: 18px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        text-align: center;
+        transition: 0.3s;
+        cursor: pointer;
+      }
+
+      .box:hover {
+        transform: translateY(-4px);
+      }
+
+      .icon {
+        width: 55px;
+        height: 55px;
+        border-radius: 50%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 0 auto 15px;
+        font-size: 24px;
+        background: #ffe5e5;
+      }
+
+      .icon.yellow {
+        background: #fff5cc;
+      }
+      .icon.blue {
+        background: #e6f7ff;
+      }
+      .icon.red {
+        background: #ffe5e5;
+      }
+
+      h4 {
+        margin: 0;
+        font-size: 18px;
+        color: #333;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h2>Welcome back, <span id="name">John</span></h2>
+      <div class="top-cards">
+        <div class="top-card">
+          <h3>Tools</h3>
+          <p>0</p>
+        </div>
+        <div class="top-card">
+          <h3>Value</h3>
+          <p>0</p>
+        </div>
+        <div class="top-card">
+          <h3>Next balance</h3>
+          <p>-</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="grid">
+        <div class="box">
+          <div class="icon red">📝</div>
+          <h4>Submit hours</h4>
+        </div>
+        <div class="box">
+          <div class="icon yellow">🛠️</div>
+          <h4>Tools</h4>
+        </div>
+        <div class="box">
+          <div class="icon blue">📁</div>
+          <h4>Projects</h4>
+        </div>
+        <div class="box">
+          <div class="icon yellow">😷</div>
+          <h4>Sickness</h4>
+        </div>
+        <div class="box">
+          <div class="icon red">🏝️</div>
+          <h4>Holidays</h4>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const username = document.getElementById("name");
+      const query = window.location.search.split("=");
+      console.log(query[1]);
+      async function getDetails(w_id) {
+        const response = await fetch(
+          `http://localhost:8002/api/v1/worker/get-single-worker?worker_id=${w_id}`,
+          {
+            method: "GET",
+            headers: { "content-type": "application/json" },
+          }
+        );
+        const result = await response.json();
+        console.log(result);
+        if (result.status) {
+          username.innerText = result?.data.worker_personal_details.firstName;
+        }
+      }
+      getDetails(query[1]);
+    </script>
+  </body>
+</html>
