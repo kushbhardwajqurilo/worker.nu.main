@@ -159,7 +159,7 @@
         const result = await response.json();
         console.log(result);
         if (result.status) {
-          username.innerText = result?.data.worker_personal_details.firstName;
+          username.innerText = result?.data?.worker_personal_details.firstName;
         }
       }
       getDetails(query[1]);

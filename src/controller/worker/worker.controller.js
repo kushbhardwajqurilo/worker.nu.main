@@ -38,7 +38,7 @@ exports.addWorker = catchAsync(async (req, res, next) => {
 
   // Admin link visible for only 10 minutes
   insert.urlVisibleToAdmin = true;
-  insert.urlAdminExpireAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+  insert.urlAdminExpireAt = Date.now() + 24 * 60 * 60 * 1000; //for 24 hour
 
   await insert.save();
 
