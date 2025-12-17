@@ -1,37 +1,32 @@
 const mongoose = require("mongoose");
+
 const clientSchema = new mongoose.Schema({
-  // client basic details
   client_details: {
     client_type: {
-      type: "String",
-      enum: {
-        values: ["Private", "Business"],
-        message: "Client Type Must be either Private or Business",
-      },
+      type: String,
+      enum: ["Private", "Business"],
       required: [true, "Client Type Required"],
       trim: true,
     },
-    client_name: { type: String, requried: [true, "Client Name Required"] },
+    client_name: { type: String, required: [true, "Client Name Required"] },
     client_email: {
       type: String,
       lowercase: true,
       trim: true,
       required: [true, "Client Email Required"],
-      validation: {
-        validator: (val) => {
-          return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
-        },
-        message: (props) => `${props.value} is not valid email!`,
+      validate: {
+        validator: (val) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val),
+        message: (props) => `${props.value} is not a valid email!`,
       },
     },
     client_location_address: {
       type: String,
-      required: [true, "Cliend address and location required"],
+      required: [true, "Client Address Required"],
     },
     city: { type: String, required: [true, "Client City Required"] },
     post_code: { type: String, required: [true, "Post Code Required"] },
   },
-  //   client contact details
+
   contact_details: {
     phone_code: { type: String, default: null },
     phone: { type: Number, default: null },
@@ -44,18 +39,31 @@ const clientSchema = new mongoose.Schema({
       },
     ],
   },
-  //   additional information
+
   additional_information: {
-    client_notes: {
-      type: String,
-      default: null,
-    },
-    sign_our_message: {
-      type: String,
-      default: null, // message for customer
-    },
+    client_notes: { type: String, default: null },
+    sign_our_message: { type: String, default: null },
   },
-  isDelete: {
+
+  isDelete: { type: Boolean, default: false },
+
+  // FIX: Not required because you generate after creation
+  client_url: {
+    type: String,
+    default: null,
+  },
+
+  clientSignature: {
+    type: String,
+    default: "blank.png",
+  },
+
+  isSignatured: {
+    type: Boolean,
+    default: false,
+  },
+
+  permission: {
     type: Boolean,
     default: false,
   },

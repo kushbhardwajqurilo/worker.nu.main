@@ -1,5 +1,6 @@
 // global error halder
 const errorHandle = (err, req, res, next) => {
+  console.log("err", err);
   // agar error mai status code na ho, set default status code
   err.statusCode = err.statusCode || 500;
   err.status = err.status || false;

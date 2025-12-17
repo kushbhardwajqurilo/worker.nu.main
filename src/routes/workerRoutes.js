@@ -15,8 +15,7 @@ const {
 const workerRouter = require("express").Router();
 workerRouter.post(
   "/add-worker",
-  authMiddeware,
-  accessMiddleware("admin"),
+
   addWorker
 ); // add worker route
 workerRouter.put(

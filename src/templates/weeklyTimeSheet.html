@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Weekly Time Sheet</title>
+
+    <!-- PDF LIBRARY -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background: #eee;
+      }
+
+      /* ✅ PERFECT A4 PAGE */
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        padding: 15mm;
+        margin: 20px auto;
+        background: #fff;
+        border: 1px solid #000;
+        box-sizing: border-box;
+      }
+
+      h2 {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+
+      .top-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        font-size: 14px;
+      }
+
+      .top-row-1 {
+        margin-bottom: 10px;
+        font-size: 14px;
+      }
+
+      .field {
+        display: inline-block;
+        min-width: 150px;
+        padding: 0 5px;
+      }
+
+      .project-row {
+        display: flex;
+        margin-bottom: 10px;
+      }
+
+      .project-row div {
+        flex: 1;
+        padding: 6px;
+        font-size: 14px;
+        border: 1px solid #000;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+        font-size: 13px;
+        page-break-inside: auto;
+      }
+
+      thead {
+        display: table-header-group;
+      }
+
+      tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+      }
+
+      th,
+      td {
+        border: 1px solid #000;
+        padding: 6px;
+        text-align: center;
+        height: 24px;
+      }
+
+      .total-row {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 10px;
+        gap: 10px;
+        font-size: 14px;
+      }
+
+      .total-box {
+        width: 80px;
+        height: 30px;
+        border: 1px solid #000;
+        text-align: center;
+        line-height: 30px;
+      }
+
+      .signature-area {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 40px;
+        font-size: 14px;
+        page-break-inside: avoid;
+      }
+
+      .signature {
+        width: 45%;
+      }
+
+      .line {
+        margin-top: 35px;
+        border-top: 1px solid #000;
+        height: 40px;
+      }
+
+      .signature-box {
+        margin-top: 10px;
+        width: 200px;
+        height: 100px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      #client-signature {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="page" id="pdfPage">
+      <h2>Weekly time sheet</h2>
+
+      <div class="top-row">
+        <div>Contractor: <span class="field">1</span></div>
+        <div>Client: <span class="field" id="client-fullname"></span></div>
+      </div>
+
+      <div class="top-row-1">
+        <div>Client: <span class="field" id="client"></span></div>
+        <div>Project: <span class="field" id="project"></span></div>
+      </div>
+
+      <div class="project-row">
+        <div>First name: <span id="w_name"></span></div>
+        <div>Last name: <span id="w_last"></span></div>
+        <div>Week nr: <span id="week"></span></div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Task description</th>
+            <th>Job Name</th>
+            <th>Time Started</th>
+            <th>Time stopped</th>
+            <th>Time total</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+
+      <div class="total-row">
+        <strong>Total:</strong>
+        <div class="total-box" id="totalBox">0</div>
+      </div>
+
+      <div class="signature-area">
+        <div class="signature">
+          Employee:
+          <div class="line"></div>
+        </div>
+
+        <div class="signature">
+          Supervisor:
+          <div class="signature-box">
+            <img id="client-signature" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let pdfGenerated = false;
+
+      function autoDownloadPDF(filename) {
+        if (pdfGenerated) return;
+        pdfGenerated = true;
+
+        const element = document.getElementById("pdfPage");
+
+        html2pdf()
+          .set({
+            filename,
+            image: { type: "jpeg", quality: 0.98 },
+            html2canvas: {
+              scale: 3,
+              useCORS: true,
+              scrollY: 0,
+            },
+            jsPDF: {
+              unit: "mm",
+              format: "a4",
+              orientation: "portrait",
+            },
+          })
+          .from(element)
+          .save();
+      }
+
+      function formatDate(dateStr) {
+        const d = new Date(dateStr);
+        return `${d.getMonth() + 1}/${d.getDate()}`;
+      }
+
+      function formatTime(t) {
+        return `${String(t.hours).padStart(2, "0")}:${String(
+          t.minutes
+        ).padStart(2, "0")}`;
+      }
+
+      (async () => {
+        const res = await fetch(
+          "http://localhost:8002/api/v1/client/get-weekly-report?project=693fe996caac295806f88c65&worker=693fe8d8caac295806f88c60&status=pending&date=2025-12-09"
+        );
+
+        const result = await res.json();
+        if (!result.status) return;
+
+        const data = result.data;
+
+        document.getElementById("client").innerText =
+          data.client.client_details.client_name;
+
+        document.getElementById("client-fullname").innerText =
+          data.client.client_details.client_name;
+
+        document.getElementById(
+          "project"
+        ).innerText = `${data.project.project_details.project_name} / ${data.project.projectId}`;
+
+        document.getElementById("w_name").innerText =
+          data.worker.worker_personal_details.firstName;
+
+        document.getElementById("w_last").innerText =
+          data.worker.worker_personal_details.lastName;
+
+        document.getElementById("week").innerText =
+          data.hours[0]?.weekNumber || "-";
+
+        const tbody = document.getElementById("tableBody");
+        let total = 0;
+
+        [...data.hours]
+          .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+          .forEach((h) => {
+            total += Number(h.total_hours || 0);
+
+            tbody.innerHTML += `
+              <tr>
+                <td>${formatDate(h.createdAt)}</td>
+                <td>${h.comments || "---"}</td>
+                <td>${data.worker.worker_position}</td>
+                <td>${formatTime(h.start_working_hours)}</td>
+                <td>${formatTime(h.finish_hours)}</td>
+                <td>${h.total_hours}</td>
+              </tr>
+            `;
+          });
+
+        document.getElementById("totalBox").innerText = total.toFixed(2);
+
+        const img = document.getElementById("client-signature");
+        img.crossOrigin = "anonymous";
+        img.src = data.client.clientSignature;
+
+        img.onload = () => {
+          setTimeout(() => {
+            autoDownloadPDF(`Timesheet-${data.project.projectId}.pdf`);
+          }, 500);
+        };
+      })();
+    </script>
+  </body>
+</html>

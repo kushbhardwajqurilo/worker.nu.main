@@ -87,6 +87,7 @@ exports.adminSignup = catchAsync(async (req, res, next) => {
     phone: phone.trim(),
     company_people: company_people.trim(),
     language: language.trim(),
+    role: "admin",
   };
   const admin = await adminModel.create(payload);
   if (!admin) {

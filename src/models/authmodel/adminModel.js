@@ -36,6 +36,10 @@ const adminSchema = new mongoose.Schema({
     },
   },
   phone: { type: String, required: [true, "phone number required"] },
+  role: {
+    type: String,
+    required: [true],
+  },
 });
 
 module.exports = mongoose.model("auth", adminSchema);
