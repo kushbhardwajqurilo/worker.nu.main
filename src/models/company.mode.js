@@ -1,6 +1,7 @@
 const { default: mongoose, mongo } = require("mongoose");
 
 const companyFields = {
+  tenantId: { type: String, required: [true, "tenant-id required"] },
   logo: { type: String, required: [true, "Company Logo Required"] },
   company_name: { type: String, required: [true, "Company Name Requried"] },
   phone: { type: String, required: [true, "Company Phone Number Required"] },
@@ -24,12 +25,17 @@ const companySchema = new mongoose.Schema(companyFields);
 
 // company alias shcema
 const companyAliasSchema = new mongoose.Schema({
-  company_id: { type: mongoose.Schema.Types.ObjectId, ref: "company", required: [true, "Company ID Required"] },
+  tenantId: { type: String, required: [true, "tenant-id required"] },
+  company_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "company",
+    required: [true, "Company ID Required"],
+  },
   company_alias: {
     type: new mongoose.Schema(companyFields, { _id: false }),
     required: [true, "Company alias data required"],
   },
-  isDelete:{type:Boolean,default:false}
+  isDelete: { type: Boolean, default: false },
 });
 
 const companyModel = mongoose.model("company", companySchema);

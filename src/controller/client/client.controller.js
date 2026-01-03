@@ -1,7 +1,9 @@
 const { default: mongoose } = require("mongoose");
 const moment = require("moment");
+const jwt = require("jsonwebtoken");
 const ExcelJS = require("exceljs");
 const fs = require("fs");
+const { isValidCustomUUID } = require("custom-uuid-generator");
 const clientModel = require("../../models/clientModel");
 const {
   catchAsync,
@@ -15,6 +17,13 @@ const hoursModel = require("../../models/hoursModel");
 
 // add client start here
 exports.addClient = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  if (!tenantId) {
+    return next(new AppError("Tenant Missing The Request", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant", 400));
+  }
   if (!req.body || req.body.toString().trim().length === 0) {
     return next(new AppError("Client data missing", 400));
   }
@@ -34,11 +43,21 @@ exports.addClient = catchAsync(async (req, res, next) => {
       return next(new AppError(`${feilds} is Required`, 400));
     }
   }
-  const client = await clientModel.create(req.body);
+  const payload = {
+    tenantId: tenantId,
+    ...req.body,
+  };
+  const client = await clientModel.create(payload);
   if (!client) {
     return next(new AppError("failed to add client", 400));
   }
-  client.client_url = `http://localhost:8002/client?cli=${client._id}`;
+
+  const urlToken = await jwt.sign(
+    { client_id: client._id, role: "client", tenantId },
+    process.env.CLIENT_KEY
+  );
+
+  client.client_url = `http://localhost:3000/client?cli=${urlToken}`;
   await client.save();
   sendSuccess(res, "Client add successfully", {}, 200, true);
 });
@@ -47,25 +66,37 @@ exports.addClient = catchAsync(async (req, res, next) => {
 
 // get all client list
 exports.getAllClientController = catchAsync(async (req, res, next) => {
-  const page = Number(req.query.page) || 1;
-  const limit = Number(req.query.limit) || 10;
+  const { tenantId } = req;
+
+  if (!tenantId) {
+    return next(new AppError("Tenant Id missing in headers", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-Id", 400));
+  }
+
+  const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
+  const limit =
+    Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 10;
+
   const skip = (page - 1) * limit;
 
-  const totalClients = await clientModel.countDocuments();
+  const totalClients = await clientModel.countDocuments({
+    tenantId,
+    isDelete: false,
+  });
 
   const clientList = await clientModel
-    .find({})
+    .find({ tenantId, isDelete: false })
     .skip(skip)
     .limit(limit)
-    .sort({ createdAt: -1 });
-
-  if (!clientList || clientList.length === 0) {
-    return next(new AppError("no client found", 400));
-  }
+    .sort({ createdAt: -1 })
+    .lean();
 
   return sendSuccess(
     res,
-    "Client list fetched successfully", // message MUST be string
+    "Client list fetched successfully",
     {
       total: totalClients,
       page,
@@ -80,14 +111,26 @@ exports.getAllClientController = catchAsync(async (req, res, next) => {
 
 // get all client for admin end
 
-// get single client details
+// get single client details for admin
 
 exports.getSingleClientController = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+
+  if (!tenantId) {
+    return next(new AppError("Tenant Id missing in headers", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-Id", 400));
+  }
   const { client } = req.query;
   if (!client) {
     return next(new AppError("Client Credential Missing", 400));
   }
-  const isClient = await clientModel.findById(client);
+  if (!mongoose.Types.ObjectId.isValid(client)) {
+    return next(new AppError("Invalid Client ObjectId", 400));
+  }
+  const isClient = await clientModel.findOne({ tenantId, _id: client });
   if (!isClient) {
     return next(new AppError("Client not found", 400));
   }
@@ -99,36 +142,85 @@ exports.getSingleClientController = catchAsync(async (req, res, next) => {
 // update client only by admin
 
 exports.updateClientController = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+
+  if (!tenantId) {
+    return next(new AppError("Tenant Id missing in headers", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-Id", 400));
+  }
+
   const { client } = req.query;
 
   if (!client) {
     return next(new AppError("Client credentials missing", 400));
   }
-  // Check duplicates properly
-  const duplicates = await clientModel.findOne({
-    _id: { $ne: client },
-    $or: [
-      { "client_details.client_email": req.body.client_details.client_email },
-      { "contact_details.phone": req.body.contact_details.phone },
-    ],
-  });
-  if (duplicates) {
-    return next(new AppError("Email or phone already in use", 400));
-  }
-  // Check existing client
+
+  // 🔹 Check existing client
   const isClient = await clientModel.findById(client);
   if (!isClient) {
     return next(new AppError("Client not found", 400));
   }
-  // Update client
+
+  // 🔹 Duplicate check only if values exist
+  const orConditions = [];
+
+  if (req.body?.client_details?.client_email) {
+    orConditions.push({
+      "client_details.client_email": req.body.client_details.client_email,
+    });
+  }
+
+  if (req.body?.contact_details?.phone) {
+    orConditions.push({
+      "contact_details.phone": req.body.contact_details.phone,
+    });
+  }
+
+  if (orConditions.length) {
+    const duplicates = await clientModel.findOne({
+      tenantId,
+      _id: { $ne: client },
+      $or: orConditions,
+    });
+
+    if (duplicates) {
+      return next(new AppError("Email or phone already in use", 400));
+    }
+  }
+
+  // 🔹 Remove blank fields before update
+  const cleanObject = (obj) => {
+    Object.keys(obj).forEach((key) => {
+      if (obj[key] === "" || obj[key] === null || obj[key] === undefined) {
+        delete obj[key];
+      } else if (typeof obj[key] === "object" && !Array.isArray(obj[key])) {
+        cleanObject(obj[key]);
+        if (Object.keys(obj[key]).length === 0) delete obj[key];
+      }
+    });
+    return obj;
+  };
+
+  const cleanBody = cleanObject({ ...req.body });
+
+  if (!Object.keys(cleanBody).length) {
+    return next(new AppError("Nothing to update", 400));
+  }
+
+  // 🔹 Update client
   const updateResult = await clientModel.updateOne(
     { _id: client },
-    { $set: req.body }
+    { $set: cleanBody }
   );
+
   if (updateResult.modifiedCount === 0) {
-    return next(new AppError("Update Failed, Try Again", 400));
+    return next(new AppError("Update failed, try again", 400));
   }
-  return sendSuccess(res, "Update success", {}, 201, true);
+
+  return sendSuccess(res, "Update success", {}, 200, true);
 });
 
 //  update client only by admin end
@@ -136,6 +228,15 @@ exports.updateClientController = catchAsync(async (req, res, next) => {
 // delete client start
 
 exports.deleteClientController = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+
+  if (!tenantId) {
+    return next(new AppError("Tenant Id missing in headers", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-Id", 400));
+  }
   const { admin_id } = req;
   const { client } = req.query;
   if (!admin_id || admin_id.toString().trim().length === 0) {
@@ -144,14 +245,12 @@ exports.deleteClientController = catchAsync(async (req, res, next) => {
   if (!client || client.toString().trim().length === 0) {
     return next(new AppError("client credentials requried", 400));
   }
-  const isClient = await clientModel.findById(client);
+  const isClient = await clientModel.findOne({ tenantId, _id: client });
   if (!isClient) {
     return next(new AppError("client not found", 400));
   }
-  const client_delete = await isClient.deleteOne();
-  if (client_delete.deletedCount === 0) {
-    return next(new AppError("Delete Failed. Try Again Later.", 400));
-  }
+  isClient.isDelete = true;
+  await isClient.save();
   return sendSuccess(res, "client deleted", {}, 201, true);
 });
 
@@ -160,6 +259,15 @@ exports.deleteClientController = catchAsync(async (req, res, next) => {
 // <----------- delete multiple client ----------->
 
 exports.deleteMultipleClients = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+
+  if (!tenantId) {
+    return next(new AppError("Tenant Id missing in headers", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-Id", 400));
+  }
   const { c_id } = req.body;
   if (!c_id || c_id.length === 0) {
     return next(new ("client credentials requried", 400)());
@@ -170,7 +278,7 @@ exports.deleteMultipleClients = catchAsync(async (req, res, next) => {
     }
   }
   const result = await clientModel.updateMany(
-    { _id: { $in: c_id } },
+    { tenantId, _id: { $in: c_id } },
     { $set: { isDelete: true } }
   );
   if (!result || result.length === 0) {
@@ -184,6 +292,15 @@ exports.deleteMultipleClients = catchAsync(async (req, res, next) => {
 // <------- search client ----------->
 
 exports.searchClientController = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+
+  if (!tenantId) {
+    return next(new AppError("Tenant Id missing in headers", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-Id", 400));
+  }
   const { q } = req.query;
   const safeQuery = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const query = {
@@ -214,7 +331,7 @@ exports.searchClientController = catchAsync(async (req, res, next) => {
       },
     ],
   };
-  const result = await clientModel.find(query);
+  const result = await clientModel.find({ tenantId, query });
   if (!result || result.length) {
     return next(new AppError("no client found"));
   }
@@ -275,11 +392,16 @@ exports.clientSignature = catchAsync(async (req, res, next) => {
 // get worker for clients
 
 exports.getClientWorkers = catchAsync(async (req, res, next) => {
+  const token = req.headers["authorization"].split(" ")[1];
+  if (!token) {
+    return next(new AppError("Credentials missing in the headers", 400));
+  }
+  const { tenantId, client_id } = jwt.decode(token);
   const { c_id } = req.query;
   if (!c_id) {
     return next(new AppError("client missing", 400));
   }
-  const isClient = await clientModel.findById(c_id);
+  const isClient = await clientModel.findOne({ tenantId, _id: client_id });
   if (!isClient) {
     return next(new AppError("client not found", 400));
   }
@@ -780,91 +902,108 @@ exports.downloadReportExcel = catchAsync(async (req, res, next) => {
 
 // //  <------------ weekly time sheet report end ---------->
 
+const convertIntoWeek = (date) => {
+  const joiningDate = new Date(
+    Number(date.split("-")[0]),
+    Number(date.split("-")[1]) - 1,
+    Number(date.split("-")[2])
+  );
+  const currentMonth = new Date();
+
+  const diffMins = currentMonth - joiningDate;
+  const diffDays = Math.floor(diffMins / (1000 * 60 * 60 * 24));
+
+  const week = Math.floor(diffDays / 7);
+  return week;
+};
+
 exports.weeklyReport = catchAsync(async (req, res, next) => {
-  const requiredFields = ["project", "worker", "status", "date"];
+  const { workerId, date } = req.query;
 
-  // ✅ VALIDATION
-  for (let field of requiredFields) {
-    if (!req.query[field] || req.query[field].toString().trim().length === 0) {
-      return next(new AppError(`${field} missing in filter`, 400));
+  // 1️⃣ Validation
+  if (!workerId || !mongoose.isValidObjectId(workerId)) {
+    return next(new AppError("Invalid workerId", 400));
+  }
+
+  // 2️⃣ Date logic
+  const baseDate = date ? moment(date) : moment();
+
+  const weekStart = baseDate.startOf("isoWeek").toDate(); // Monday
+  const weekEnd = baseDate.endOf("isoWeek").toDate(); // Sunday
+
+  // 3️⃣ Fetch data
+  const records = await hoursModel
+    .find({
+      workerId,
+      createdAt: {
+        $gte: weekStart,
+        $lte: weekEnd,
+      },
+    })
+    .sort({ createdAt: 1 });
+
+  if (!records || records.length === 0) {
+    return sendSuccess(res, "No records found for this week", {
+      weekStart,
+      weekEnd,
+      totalDays: 0,
+      totalHours: 0,
+      data: [],
+    });
+  }
+
+  // 4️⃣ Calculate total hours
+  let totalMinutes = 0;
+
+  records.forEach((rec) => {
+    if (rec.day_off) return;
+
+    const start =
+      rec.start_working_hours.hours * 60 + rec.start_working_hours.minutes;
+
+    const end = rec.finish_hours.hours * 60 + rec.finish_hours.minutes;
+
+    let workedMinutes = end - start;
+
+    if (rec.break_time) {
+      workedMinutes -= 60; // assuming 1 hour break
     }
-  }
 
-  const { project, worker, status, date } = req.query;
-
-  // ✅ WEEK RANGE (MONDAY → SUNDAY)
-  const weekStart = moment(date).startOf("isoWeek").toDate();
-  const weekEnd = moment(date).endOf("isoWeek").toDate();
-
-  // ================= PROJECT =================
-  const filterProject = await projectMode
-    .findById(project)
-    .select(
-      "-daily_work_hour -project_workers -project_details_for_workers -project_time_economical_details"
-    )
-    .lean();
-
-  if (!filterProject) {
-    return next(new AppError("project not found", 400));
-  }
-
-  // ================= CLIENT =================
-  const filterClient = await clientModel
-    .findById(filterProject.client_details.client)
-    .select("-additional_information -isDelete -client_url -contact_details")
-    .lean();
-
-  // ================= WORKER =================
-  const filterWorker = await workerModel
-    .findById(worker)
-    .select(
-      `
-      -activation_date
-      -worker_hours_access_settings
-      -worker_tools_access_settings
-      -other_access_settings
-      -worker_holiday
-      -isDelete
-      -isActive
-      -dashboardUrl
-      -urlVisibleToAdmin
-      -urlAdminExpireAt
-      -personal_information
-      -worker_economical_data
-      -__v
-    `
-    )
-    .lean();
-
-  if (!filterWorker) {
-    return next(new AppError("worker not found", 404));
-  }
-
-  // ================= HOURS (🔥 MAIN FIX) =================
-  const hoursData = await hoursModel.find({
-    workerId: worker,
-    status,
-    createdAt: {
-      $gte: weekStart,
-      $lte: weekEnd,
-    },
+    totalMinutes += workedMinutes;
   });
 
-  if (!hoursData || hoursData.length === 0) {
-    return next(new AppError("no hours found for this week", 404));
+  const totalHours = (totalMinutes / 60).toFixed(2);
+
+  // 5️⃣ Response
+  return sendSuccess(res, "Weekly report fetched successfully", {
+    weekStart,
+    weekEnd,
+    totalDays: records.length,
+    totalHours,
+    data: records,
+  });
+});
+
+// client name for filer section
+exports.getClientNamesForFilter = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+
+  if (!tenantId) {
+    return next(new AppError("Tenant Id missing in headers", 400));
   }
 
-  // ================= FINAL RESPONSE =================
-  const data = {
-    project: filterProject,
-    client: filterClient,
-    worker: filterWorker,
-    weekRange: {
-      from: weekStart,
-      to: weekEnd,
-    },
-    hours: hoursData,
-  };
-  console.log("report", data);
-  return sendSuccess(res, "Weekly report data fetched", data, 200, true);
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-Id", 400));
+  }
+  const clients = await clientModel.find({ tenantId, isDelete: { $ne: true } });
+  if (!clients || clients.length === 0) {
+    return next(new AppError("no clients found", 400));
+  }
+  const result = [];
+  clients.forEach((e, val) =>
+    result.push({ name: e.client_details.client_name, _id: e._id })
+  );
+  return sendSuccess(res, "Client Fetch", result, 200, true);
 });
+
+// exports.filters

@@ -1,5 +1,10 @@
 const mongoose = require("mongoose");
 const adminSchema = new mongoose.Schema({
+  tenantId: {
+    type: String,
+    unique: true,
+    required: [true, "tenantId required"],
+  },
   name: {
     type: String,
     required: [true, "admin name required"],
@@ -26,7 +31,7 @@ const adminSchema = new mongoose.Schema({
   company_name: { type: String, required: [true, "company name required"] },
   company_people: {
     type: String,
-    required: [true, "compant people required"],
+    required: [true, "company people required"],
   },
   language: {
     type: String,
@@ -41,5 +46,5 @@ const adminSchema = new mongoose.Schema({
     required: [true],
   },
 });
-
+// const generateTenantId =
 module.exports = mongoose.model("auth", adminSchema);

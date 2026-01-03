@@ -3,6 +3,8 @@ const {
   approveLeaveRequest,
   getSicknessRequest,
   setProjectReminder,
+  editReminder,
+  deleteReminder,
 } = require("../controller/admin/admin.controller");
 const {
   authMiddeware,
@@ -31,5 +33,22 @@ adminRouter.post(
 );
 
 // =================== Reminder ===================
-adminRouter.post("/project-reminder", setProjectReminder);
+adminRouter.post(
+  "/project-reminder",
+  authMiddeware,
+  accessMiddleware("admin"),
+  setProjectReminder
+);
+adminRouter.put(
+  "/edit-reminder",
+  authMiddeware,
+  accessMiddleware("admin"),
+  editReminder
+);
+adminRouter.delete(
+  "/delete-reminder",
+  authMiddeware,
+  accessMiddleware("admin"),
+  deleteReminder
+);
 module.exports = adminRouter;

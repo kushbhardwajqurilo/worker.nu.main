@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-const moment = require("moment");
 
 const workerHoursSchema = new mongoose.Schema(
   {
@@ -15,10 +14,16 @@ const workerHoursSchema = new mongoose.Schema(
         ref: "project",
         required: true,
       },
-      project_date: { type: Date, required: true },
+      project_date: {
+        type: Date,
+        required: true,
+      },
     },
 
-    weekNumber: Number,
+    weekNumber: {
+      type: Number,
+      default: null,
+    },
 
     status: {
       type: String,
@@ -29,13 +34,13 @@ const workerHoursSchema = new mongoose.Schema(
     day_off: { type: Boolean, default: false },
 
     start_working_hours: {
-      hours: Number,
-      minutes: Number,
+      hours: Number, // 0–23
+      minutes: Number, // 0–59
     },
 
     finish_hours: {
-      hours: Number,
-      minutes: Number,
+      hours: Number, // 0–23
+      minutes: Number, // 0–59
     },
 
     break_time: {
@@ -43,51 +48,77 @@ const workerHoursSchema = new mongoose.Schema(
       required: true,
     },
 
-    total_hours: Number,
+    total_hours: {
+      type: Number,
+      default: 0,
+    },
 
     comments: { type: String, required: true },
     image: { type: String, required: true },
   },
-  { timestamps: true }
+  { timestamps: true } // createdAt used
 );
 
-async function calculateFields(doc) {
-  if (doc.project?.project_date)
-    doc.weekNumber = moment(doc.project.project_date).isoWeek();
-
-  const sh = doc.start_working_hours?.hours || 0;
-  const sm = doc.start_working_hours?.minutes || 0;
-  const fh = doc.finish_hours?.hours || 0;
-  const fm = doc.finish_hours?.minutes || 0;
-
-  const start = sh * 60 + sm;
-  const end = fh * 60 + fm;
-
-  let totalMinutes = end - start;
-
-  const project = await mongoose
-    .model("project")
-    .findById(doc.project.projectId)
+// ================= WEEK NUMBER LOGIC =================
+async function calculateWeekNumber(workerId, hoursCreatedAt) {
+  const worker = await mongoose
+    .model("worker")
+    .findById(workerId)
+    .select("createdAt")
     .lean();
-  const breakMin = project?.daily_work_hour?.break_time || 0;
 
-  if (doc.break_time) totalMinutes -= breakMin;
+  if (!worker || !worker.createdAt) return null;
 
-  if (totalMinutes < 0) totalMinutes = 0;
+  const diffMs =
+    new Date(hoursCreatedAt).getTime() - new Date(worker.createdAt).getTime();
 
-  doc.total_hours = Number((totalMinutes / 60).toFixed(2));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  return Math.floor(diffDays / 7) + 1;
 }
 
+// ================= SAVE HOOK =================
 workerHoursSchema.pre("save", async function () {
-  await calculateFields(this);
+  // ---- week number ----
+  this.weekNumber = await calculateWeekNumber(this.workerId, this.createdAt);
+
+  // ---- HOURS CALCULATION (24h + MIDNIGHT SAFE) ----
+  const sh = this.start_working_hours?.hours || 0;
+  const sm = this.start_working_hours?.minutes || 0;
+  const fh = this.finish_hours?.hours || 0;
+  const fm = this.finish_hours?.minutes || 0;
+
+  const startMinutes = sh * 60 + sm;
+  let endMinutes = fh * 60 + fm;
+
+  // 🔥 midnight cross handling (22:00 → 02:00)
+  if (endMinutes < startMinutes) {
+    endMinutes += 24 * 60;
+  }
+
+  let totalMinutes = endMinutes - startMinutes;
+  if (totalMinutes < 0) totalMinutes = 0;
+
+  // keep clean number (no long decimals)
+  this.total_hours = Math.round((totalMinutes / 60) * 100) / 100;
 });
 
+// ================= UPDATE HOOK =================
 workerHoursSchema.pre("findOneAndUpdate", async function () {
-  let update = this.getUpdate();
+  const update = this.getUpdate();
   if (!update) return;
 
-  update = update.$set || update;
-  await calculateFields(update);
+  // 🔥 existing doc lao (important)
+  const existingDoc = await this.model.findOne(this.getQuery()).lean();
+
+  if (!existingDoc) return;
+
+  const weekNumber = await calculateWeekNumber(
+    existingDoc.workerId,
+    existingDoc.createdAt
+  );
+
+  update.$set = update.$set || {};
+  update.$set.weekNumber = weekNumber;
 
   this.setUpdate(update);
 });

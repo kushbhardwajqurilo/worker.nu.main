@@ -11,19 +11,26 @@ const { workerModel } = require("../../models/workerModel");
 
 const projectMode = require("../../models/projectMode");
 const { WorkerReminder } = require("../../models/reminder.model");
+const { isValidCustomUUID } = require("custom-uuid-generator");
 
 //get leaves for admin
 exports.getHolidayRequest = catchAsync(async (req, res, next) => {
-  const { admin_id } = req;
+  const { admin_id, tenantId } = req;
+  if (tenantId) {
+    return next(new AppError("tenant-id missing", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("invalid tenant-id", 400));
+  }
   if (!mongoose.Types.ObjectId.isValid(admin_id)) {
     return next("invalid admin credentials");
   }
 
-  const admin = await adminModel.findById(admin_id);
+  const admin = await adminModel.findOne({ tenantId, _idadmin_id });
   if (!admin) {
     return next(new AppError("invalid admin", 400));
   }
-  const result = await holidayModel.find({ status: "pending" });
+  const result = await holidayModel.find({ tenantId, status: "pending" });
   if (!result) {
     return next(new AppError("now holiday request found.", 400));
   }
@@ -32,16 +39,18 @@ exports.getHolidayRequest = catchAsync(async (req, res, next) => {
 
 // get sick leave request
 exports.getSicknessRequest = catchAsync(async (req, res, next) => {
-  const { admin_id } = req;
-  if (!mongoose.Types.ObjectId.isValid(admin_id)) {
-    return next("invalid admin credentials");
+  const { admin_id, tenantId } = req;
+  if (tenantId) {
+    return next(new AppError("tenant-id missing", 400));
   }
-
-  const admin = await adminModel.findById(admin_id);
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("invalid tenant-id", 400));
+  }
+  const admin = await adminModel.findOne({ tenantId, _id: admin_id });
   if (!admin) {
     return next(new AppError("invalid admin", 400));
   }
-  const result = await sicknessModel.find({ status: "pending" });
+  const result = await sicknessModel.find({ tenantId, status: "pending" });
   if (!result) {
     return next(new AppError("sickness request found.", 400));
   }
@@ -51,7 +60,13 @@ exports.getSicknessRequest = catchAsync(async (req, res, next) => {
 // approve holiday request
 
 exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
-  const { admin_id } = req;
+  const { admin_id, tenantId } = req;
+  if (tenantId) {
+    return next(new AppError("tenant-id missing", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("invalid tenant-id", 400));
+  }
   const { l_id, leave, w_id } = req.query;
   if (
     !mongoose.Types.ObjectId.isValid(admin_id) ||
@@ -64,7 +79,7 @@ exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
     return next(new AppError("leave type missing", 400));
   }
   //   check valid worker
-  const worker = await workerModel.findById(w_id);
+  const worker = await workerModel.findOne({ tenantId, _id: w_id });
   if (!worker) {
     return next(new AppError("Invalid Worker", 400));
   }
@@ -74,7 +89,7 @@ exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
 
   //   check  for leave
   if (leave === "sickness") {
-    const sickness = await sicknessModel.findById(l_id);
+    const sickness = await sicknessModel.findOne({ tenantId, _id: l_id });
     if (!sickness) {
       return next(new AppError("sickness request not found", 400));
     }
@@ -94,7 +109,7 @@ exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
     await worker.save();
     return sendSuccess(res, "sick leave request approved", {}, 201, true);
   } else if (leave === "holiday") {
-    const holidays = await holidayModel.findById(l_id);
+    const holidays = await holidayModel.findOne({ tenantId, _id: l_id });
     if (!holidays) {
       return next(new AppError("holidat request not found", 400));
     }
@@ -183,13 +198,19 @@ exports.editReminder = catchAsync(async (req, res, next) => {
   // ===== FIND REMINDER (NOT SENT ONLY) =====
   const reminder = await WorkerReminder.findOne({
     _id: r_id,
-    isSent: false,
   });
 
   if (!reminder) {
     return next(new AppError("No reminder found or already sent", 404));
   }
-
+  if (reminder.isSent) {
+    return next(
+      new AppError(
+        "Cannot edit reminder because it has already been sent.",
+        200
+      )
+    );
+  }
   // ===== BUILD UPDATE PAYLOAD =====
   const reminderPayload = {
     title: req.body.title,

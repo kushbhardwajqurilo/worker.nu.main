@@ -3,7 +3,8 @@ const generateId = require("../utils/generateId");
 const projectSchema = new mongoose.Schema(
   {
     // project details
-    projectId:{type:String,required:false},
+    tenantId: { type: String, required: [true, "tenant-id required"] },
+    projectId: { type: String, required: false },
     project_details: {
       project_name: { type: String, required: [true, "Project Name Required"] },
       project_location_address: {

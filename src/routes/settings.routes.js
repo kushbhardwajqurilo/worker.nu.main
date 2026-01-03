@@ -1,31 +1,33 @@
 const {
-  addCustomField,
-  updateCustomField,
-  deleteCustomFields,
-  getAllCustomfields,
-  addPreSelectGroup,
-  getAllPreSelectGroup,
-  deletePreselectGroup,
-  updatePreSelectGroup,
-  getSingleGroup,
   addOrUpdateHolidaySicknessSettings,
+  addWorkerPosition,
+  getAllPositions,
+  deletePosition,
 } = require("../controller/settings/settings.controller");
-
+const {
+  authMiddeware,
+  accessMiddleware,
+} = require("../middleware/authMiddleware");
 const settingsRouter = require("express").Router();
 
-// custom field routes
-settingsRouter.post("/add-field", addCustomField);
-settingsRouter.put("/update-field", updateCustomField);
-settingsRouter.delete("/delete-field", deleteCustomFields);
-settingsRouter.get("/get-field", getAllCustomfields);
-
-// PreSelect Group
-settingsRouter.post("/add-preselect", addPreSelectGroup);
-settingsRouter.get("/get-preselect", getAllPreSelectGroup);
-settingsRouter.put("/update", updatePreSelectGroup);
-settingsRouter.delete("/delete", deletePreselectGroup);
-settingsRouter.get("/single-group", getSingleGroup);
-
+settingsRouter.post(
+  "/add-position",
+  authMiddeware,
+  accessMiddleware("admin"),
+  addWorkerPosition
+);
+settingsRouter.get(
+  "/get-position",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getAllPositions
+);
+settingsRouter.delete(
+  "/delete-position",
+  authMiddeware,
+  accessMiddleware("admin"),
+  deletePosition
+);
 // Holiday & sickness
 settingsRouter.post("/leaves", addOrUpdateHolidaySicknessSettings);
 module.exports = settingsRouter;

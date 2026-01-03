@@ -8,54 +8,47 @@ const {
   sendSuccess,
 } = require("../../utils/errorHandler");
 const tokenMode = require("../../models/authmodel/tokenMode");
+const { generateCustomUUID } = require("custom-uuid-generator");
 
 // access and referesh tokens
 const generateAcessToken = (data) => {
   return jwt.sign(
-    { id: data.admin_id, role: data.role, name: data.name },
+    {
+      id: data.admin_id,
+      role: data.role,
+      name: data.name,
+      tenant: data.tenant,
+    },
     process.env.ACCESS_TOKEN_KEY,
-    { expiresIn: "15m" }
+    { expiresIn: "1m" }
   );
 };
 
-const generateRefreshToken = async (user) => {
-  // find existing token for this admin
-  let existing = await tokenMode.findOne({ userId: user.admin_id });
-
-  // If token exist, check expired or not
-  if (existing) {
-    try {
-      // Verify existing token
-      jwt.verify(existing.token, process.env.SECRET_KEY);
-
-      // If valid, return same token
-      return existing.token;
-    } catch (err) {
-      // Token is expired → generate new
-      const newToken = jwt.sign(
-        { id: user.admin_id, role: user.role },
-        process.env.SECRET_KEY,
-        { expiresIn: "7d" }
-      );
-
-      // Update old token
-      existing.token = newToken;
-      await existing.save();
-
-      return newToken;
-    }
-  }
-
-  // If no token found → create new
+const generateRefreshToken = async (user, expire) => {
+  console.log("expire", expire);
   const refreshToken = jwt.sign(
-    { id: user.admin_id, role: user.role },
+    { id: user.admin_id, role: user.role, tenant: user.tenant },
     process.env.SECRET_KEY,
-    { expiresIn: "7d" }
+    { expiresIn: expire || "15m" }
   );
 
-  await new tokenMode({ token: refreshToken, userId: user.admin_id }).save();
+  // 🔥 One user = one document (UPSERT)
+  await tokenMode.findOneAndUpdate(
+    { userId: user.admin_id },
+    {
+      token: refreshToken,
+      expireIn: expire,
+    },
+    {
+      upsert: true, // create if not exists
+      new: true,
+      setDefaultsOnInsert: true,
+    }
+  );
+
   return refreshToken;
 };
+
 // admin signup
 
 exports.adminSignup = catchAsync(async (req, res, next) => {
@@ -81,6 +74,7 @@ exports.adminSignup = catchAsync(async (req, res, next) => {
   console.log("pss", hashPass);
   const payload = {
     email: email.trim().toLowerCase(),
+    tenantId: generateCustomUUID(),
     password: hashPass.trim(),
     name: name.trim().toLowerCase(),
     company_name: company_name.trim(),
@@ -104,7 +98,7 @@ exports.adminLogin = catchAsync(async (req, res, next) => {
   if (!req.body || req.body.toString().trim().length === 0) {
     return next(new AppError("login credentials require"));
   }
-  const { email, password } = req.body;
+  const { email, password, rememberme } = req.body;
   if (!email || email.trim().length === 0) {
     return next(new AppError("Email required", 400));
   }
@@ -128,15 +122,21 @@ exports.adminLogin = catchAsync(async (req, res, next) => {
     //   { expiresIn: "7d" }
     // );
     // console.log("resone", isAdmin);
+    const expire = rememberme ? "30d" : "7d";
     const accessToken = generateAcessToken({
       admin_id: isAdmin._id,
+      tenant: isAdmin.tenantId,
       role: "admin",
       name: isAdmin.name,
     });
-    const refreshToken = await generateRefreshToken({
-      admin_id: isAdmin._id,
-      role: "admin",
-    });
+    const refreshToken = await generateRefreshToken(
+      {
+        admin_id: isAdmin._id,
+        tenant: isAdmin.tenantId,
+        role: "admin",
+      },
+      expire
+    );
     return sendSuccess(
       res,
       "login successfull",
@@ -153,40 +153,42 @@ exports.adminLogin = catchAsync(async (req, res, next) => {
 
 // get refresh token
 exports.refreshToken = catchAsync(async (req, res, next) => {
-  const { refresh_token } = req.headers;
-
-  // 1. Check body token
-  if (!refresh_token || refresh_token.trim().length === 0) {
+  const { refresh_token } = req.body;
+  if (!refresh_token) {
     return next(new AppError("Refresh Token Missing", 400));
   }
+  const tenant = jwt.decode(refresh_token);
 
-  // 2. Check refresh token exists in DB
-  const savedToken = await tokenMode.findOne({ token: refresh_token });
-  if (!savedToken) {
+  const saved = await tokenMode.findOne({ userId: tenant.id });
+
+  // console.log("saved", saved);
+  if (!saved) {
     return next(new AppError("Invalid Refresh Token", 403));
   }
 
-  // 3. Verify refresh token
-  jwt.verify(refresh_token, process.env.SECRET_KEY, async (err, userData) => {
-    if (err) {
-      return next(new AppError("Refresh Token Expired or Invalid", 403));
-    }
-
-    // 4. Create new access token from userData payload
+  jwt.verify(refresh_token, process.env.SECRET_KEY, async (err, payload) => {
+    const tenantData = await adminModel.findOne({ _id: payload.id });
     const accessToken = jwt.sign(
-      {
-        id: userData.id,
-        role: userData.role,
-      },
+      { id: payload.id, role: payload.role, tenant: tenantData.tenantId },
       process.env.ACCESS_TOKEN_KEY,
-      { expiresIn: "15m" }
+      { expiresIn: "1m" } // 15 min
     );
 
-    // 5. Send new access token
+    const newRefreshToken = await generateRefreshToken(
+      {
+        admin_id: payload.id,
+        role: payload.role,
+      },
+      saved.expireIn
+    );
+
     return sendSuccess(
       res,
-      "New Access Token Generated",
-      { accessToken },
+      "Token refreshed",
+      {
+        accessToken,
+        refreshToken: newRefreshToken,
+      },
       200,
       true
     );
@@ -248,3 +250,25 @@ exports.adminForgetPasswordController = catchAsync(async (req, res, next) => {
 });
 
 // forget password end
+
+// admin logout
+
+exports.adminLogoutController = catchAsync(async (req, res, next) => {
+  const { refresh_token } = req.headers;
+
+  // 1. Check refresh token
+  if (!refresh_token || refresh_token.trim().length === 0) {
+    return next(new AppError("Refresh Token Missing", 400));
+  }
+
+  // 2. Check token exists in DB
+  const tokenExists = await tokenMode.findOne({ token: refresh_token });
+
+  if (!tokenExists) {
+    // Already logged out OR invalid token
+    return sendSuccess(res, "Already Logged Out", {}, 200, true);
+  }
+  // 3. Delete refresh token (invalidate session)
+  await tokenMode.deleteOne({ token: refresh_token });
+  return sendSuccess(res, "Logout Successfully", {}, 200, true);
+});

@@ -3,37 +3,37 @@ const { catchAsync, AppError } = require("../utils/errorHandler");
 
 // admin middleware
 const authMiddeware = catchAsync(async (req, res, next) => {
-  const authHeader = req.headers["authorization"];
+  const authHeader = req.headers.authorization;
 
   if (!authHeader) {
-    return next(new AppError("Authorization Header Missing", 400));
+    return next(new AppError("Authorization header missing", 401));
+  }
+
+  // Must be: Bearer <token>
+  if (!authHeader.startsWith("Bearer ")) {
+    return next(new AppError("Invalid authorization format", 401));
   }
 
   const token = authHeader.split(" ")[1];
 
   if (!token) {
-    return next(new AppError("Token Missing In The Headers", 400));
+    return next(new AppError("Access token missing", 401));
   }
-
-  let adminInfo;
 
   try {
-    adminInfo = jwt.verify(token, process.env.ACCESS_TOKEN_KEY);
+    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_KEY);
+    req.admin_id = decoded.id;
+    req.role = decoded.role;
+    req.tenantId = decoded.tenant;
+
+    next();
   } catch (err) {
     if (err.name === "TokenExpiredError") {
-      return next(new AppError("Token has expired. Please login again.", 401));
+      return next(new AppError("Token expired. Please login again.", 401));
     }
 
-    if (err.name === "JsonWebTokenError") {
-      return next(new AppError("Invalid token.", 401));
-    }
-
-    return next(new AppError("Authorization failed.", 401));
+    return next(new AppError("Invalid or malformed token", 401));
   }
-
-  req.admin_id = adminInfo.id;
-  req.role = adminInfo.role;
-  next();
 });
 
 // role base access middleware
@@ -44,4 +44,29 @@ const accessMiddleware = (...roles) => {
     } else next();
   };
 };
-module.exports = { authMiddeware, accessMiddleware };
+
+const clientAuthMiddleware = catchAsync(async (req, res, next) => {
+  const authHeader = req.headers["authorization"];
+  if (!authHeader) {
+    return next(new AppError("Authorization missing", 400));
+  }
+  const cliToken = authHeader.split(" ")[1];
+  if (!cliToken) {
+    return next(new AppError("Token missing in the headers", 400));
+  }
+
+  let clientInfo;
+  try {
+    clientInfo = jwt.verify(cliToken, process.env.CLIENT_KEY);
+  } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      return next(new AppError("Token has expired. Login Again.", 400));
+    }
+    return next(new AppError("Authorizaion Failed", 400));
+  }
+  req.client_id = clientInfo.client_id;
+  req.tenant = clientInfo.tenant;
+  req.role = clientInfo.client_id;
+  next();
+});
+module.exports = { authMiddeware, accessMiddleware, clientAuthMiddleware };

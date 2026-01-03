@@ -1,3 +1,5 @@
+const { hoursImageUpload } = require("../confing/cloudinaryConfig");
+
 const {
   createWorkerHours,
   updateWorkerHours,
@@ -8,15 +10,16 @@ const {
   dashboardHours,
 } = require("../controller/hours/hours.controller");
 
-const { getCloudinarySignature } = require("../confing/cloudinaryConfig");
-
 const hoursRouter = require("express").Router();
 
 // < ---------------- CLOUDINARY SIGNATURE ---------------- >
-hoursRouter.get("/get-url", getCloudinarySignature);
 
 /* ---------------- CREATE HOURS (Worker) ---------------- */
-hoursRouter.post("/submit-hours", createWorkerHours);
+hoursRouter.post(
+  "/submit-hours",
+  hoursImageUpload.single("file"),
+  createWorkerHours
+);
 
 /* ---------------- UPDATE HOURS (Worker/Admin) ---------- */
 hoursRouter.put("/update-hours", updateWorkerHours);
@@ -45,4 +48,5 @@ hoursRouter.patch("/approve-week", approveWeek);
 
 // dashboard hours
 hoursRouter.get("/get-hours", dashboardHours);
+
 module.exports = hoursRouter;

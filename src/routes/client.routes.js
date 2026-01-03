@@ -10,6 +10,7 @@ const {
   downloadReportExcel,
   generateReport,
   weeklyReport,
+  getClientNamesForFilter,
 } = require("../controller/client/client.controller");
 const {
   authMiddeware,
@@ -19,7 +20,12 @@ const upload = require("../middleware/cloudinaryMiddleware");
 
 const clientRouter = require("express").Router();
 
-clientRouter.post("/add-client", addClient); // add client by admin route
+clientRouter.post(
+  "/add-client",
+  authMiddeware,
+  accessMiddleware("admin"),
+  addClient
+); // add client by admin route
 clientRouter.get(
   "/get-clients",
   authMiddeware,
@@ -60,4 +66,11 @@ clientRouter.post("/signature", upload.single("file"), clientSignature);
 clientRouter.get("/client-worker", getClientWorkers);
 // clientRouter.get("/get-weekly-report", generateReport);
 clientRouter.get("/get-weekly-report", weeklyReport);
+
+clientRouter.get(
+  "/get-filter-name",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getClientNamesForFilter
+);
 module.exports = clientRouter;

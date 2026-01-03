@@ -1,6 +1,11 @@
 const mongoose = require("mongoose");
 
 const holidaySchema = new mongoose.Schema({
+  tenantId: {
+    type: String,
+    required: [true, "tenant-id required"],
+    ref: "auth",
+  },
   workerId: {
     type: mongoose.Schema.Types.ObjectId,
     required: [true, "worker id required"],
@@ -40,6 +45,11 @@ const holidaySchema = new mongoose.Schema({
   },
 });
 const sicknessSchema = new mongoose.Schema({
+  tenantId: {
+    type: String,
+    required: [true, "tenant-id required"],
+    ref: "auth",
+  },
   workerId: {
     type: mongoose.Schema.Types.ObjectId,
     required: [true, "worker id required"],

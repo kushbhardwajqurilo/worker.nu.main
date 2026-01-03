@@ -3,6 +3,11 @@ const mongoose = require("mongoose");
 // ================== CUSTOM FIELD ==================
 const customFieldSchema = new mongoose.Schema(
   {
+    tenantId: {
+      type: String,
+      required: [true, "tenant-id Requird"],
+      ref: "auth",
+    },
     type: {
       type: String,
 
@@ -40,6 +45,11 @@ const customFieldSchema = new mongoose.Schema(
 // ================== CUSTOM FIELD GROUP ==================
 const customFieldGroupSchema = new mongoose.Schema(
   {
+    tenantId: {
+      type: String,
+      required: [true, "tenant-id required"],
+      ref: "auth",
+    },
     groupName: {
       type: String,
       required: true,
@@ -97,6 +107,7 @@ const customFieldGroupSchema = new mongoose.Schema(
 
 const holidaySicknessSettingsSchema = new mongoose.Schema(
   {
+    tenantId: { type: String, required: [true, "tenant Required"] },
     holiday: {
       enabled: {
         type: Boolean,

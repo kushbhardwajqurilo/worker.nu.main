@@ -163,6 +163,10 @@ const puppeteer = require("puppeteer");
 const axios = require("axios");
 
 exports.createWorkerHours = catchAsync(async (req, res, next) => {
+  const { file } = req;
+  // if (!file || file.length === 0 || file === undefined) {
+  //   return next(new AppError("Image Required", 400));
+  // }
   const {
     project,
     day_off,
@@ -170,42 +174,43 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
     finish_hours,
     break_time,
     comments,
-    image,
     workerId,
   } = req.body;
+
+  const payload = {
+    project: JSON.parse(project),
+    start_working_hours: JSON.parse(start_working_hours),
+    finish_hours: JSON.parse(finish_hours),
+    day_off,
+    break_time,
+    comments,
+    workerId,
+    image: file.path,
+  };
 
   if (!workerId || !mongoose.isValidObjectId(workerId))
     return next(new AppError("Invalid workerId", 400));
 
-  if (!project?.projectId) return next(new AppError("Project ID missing", 400));
+  if (!payload.project?.projectId)
+    return next(new AppError("Project ID missing", 400));
 
   // 🔥 AUTO GET PROJECT DATE
-  const projectData = await projectMode.findById(project.projectId).lean();
+  const projectData = await projectMode
+    .findById(payload.project.projectId)
+    .lean();
   if (!projectData) return next(new AppError("Project not found", 404));
 
   const projectDate = projectData.project_details?.project_start_date;
   if (!projectDate)
     return next(new AppError("Project start date missing", 400));
 
-  if (!start_working_hours?.hours || !finish_hours?.hours)
+  if (!payload.start_working_hours?.hours || !payload.finish_hours?.hours)
     return next(new AppError("Working hours missing", 400));
 
-  if (!comments || !image)
+  if (!comments || !payload.image)
     return next(new AppError("Comments & image required", 400));
 
-  const newRecord = await hoursModel.create({
-    workerId,
-    project: {
-      projectId: project.projectId,
-      project_date: projectDate, // 🔥 ALWAYS CORRECT DATE
-    },
-    day_off,
-    start_working_hours,
-    finish_hours,
-    break_time,
-    comments,
-    image,
-  });
+  const newRecord = await hoursModel.create(payload);
 
   return sendSuccess(res, "Hours added successfully", newRecord, 200, true);
 });

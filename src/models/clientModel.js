@@ -1,10 +1,11 @@
 const mongoose = require("mongoose");
 
 const clientSchema = new mongoose.Schema({
+  tenantId: { type: String, required: [true] },
   client_details: {
     client_type: {
       type: String,
-      enum: ["Private", "Business"],
+      enum: ["private", "business"],
       required: [true, "Client Type Required"],
       trim: true,
     },
@@ -25,26 +26,17 @@ const clientSchema = new mongoose.Schema({
     },
     city: { type: String, required: [true, "Client City Required"] },
     post_code: { type: String, required: [true, "Post Code Required"] },
+    companyName: { type: String, default: null },
+    companyRegistrationNo: { type: String, default: null },
   },
 
-  contact_details: {
-    phone_code: { type: String, default: null },
-    phone: { type: Number, default: null },
-    additional_contact: [
-      {
-        name: { type: String, default: null },
-        email: { type: String, default: null },
-        phone_code: { type: String, default: "Lithuania" },
-        phone: { type: Number, default: null },
-      },
-    ],
-  },
-
-  additional_information: {
-    client_notes: { type: String, default: null },
-    sign_our_message: { type: String, default: null },
-  },
-
+  contact_details: [
+    {
+      phone: { type: String, default: null },
+    },
+  ],
+  additional_notes: { type: String, default: null },
+  sign_our_message: { type: String, default: null },
   isDelete: { type: Boolean, default: false },
 
   // FIX: Not required because you generate after creation

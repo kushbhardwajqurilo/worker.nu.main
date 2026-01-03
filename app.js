@@ -20,9 +20,32 @@ const settingsRouter = require("./src/routes/settings.routes");
 
 const ExcelJS = require("exceljs");
 const adminRouter = require("./src/routes/admin.route");
+const clientDashboardRouter = require("./src/routes/client.dashboard.route");
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors("*"));
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "https://yourdomain.com",
+  "https://admin.yourdomain.com",
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization", "Tenant-Id"],
+  })
+);
 // console.log(
 //   "paht",
 //   path.join(__dirname, "src/templates", "forgetPassword.html")
@@ -72,6 +95,7 @@ app.use(`${baseUrl}admin`, adminRouter);
 app.use(`${baseUrl}auth`, authRouter); //auth route
 app.use(`${baseUrl}worker`, workerRouter); // worker route
 app.use(`${baseUrl}client`, clientRouter); // client route
+app.use(`${baseUrl}client-dashboard`, clientDashboardRouter);
 app.use(`${baseUrl}hours`, hoursRouter); // hours route
 app.use(`${baseUrl}project`, projectRouter); // project route
 app.use(`${baseUrl}company`, companyRouter); // company router

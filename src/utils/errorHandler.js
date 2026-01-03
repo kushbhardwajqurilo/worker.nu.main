@@ -1,10 +1,10 @@
 // global error halder
 const errorHandle = (err, req, res, next) => {
-  console.log("err", err);
   // agar error mai status code na ho, set default status code
   err.statusCode = err.statusCode || 500;
   err.status = err.status || false;
 
+  console.log("error", err);
   // send error response
   res.status(err.statusCode).json({
     status: err.status,
@@ -18,7 +18,7 @@ class AppError extends Error {
   constructor(message, statusCode) {
     super(message);
     this.statusCode = statusCode;
-    this.status = `${statusCode}`.startsWith("4") ? "fail" : false;
+    this.status = statusCode === 200 || statusCode === 201;
     this.isOperational = true;
 
     Error.captureStackTrace(this, this.constructor);

@@ -11,15 +11,22 @@ const {
   requestSickness,
   getHolidays,
   getSickness,
+  workerSignature,
+  getAllProjectsToWorkerAddController,
+  getAllPositions,
 } = require("../controller/worker/worker.controller");
 const {
   authMiddeware,
   accessMiddleware,
 } = require("../middleware/authMiddleware");
+const uploadSignature = require("../middleware/signature.middleware");
+const { uploadDocuments } = require("../middleware/upload.middleware");
 const workerRouter = require("express").Router();
 workerRouter.post(
   "/add-worker",
-
+  authMiddeware,
+  accessMiddleware("admin"),
+  uploadDocuments,
   addWorker
 ); // add worker route
 workerRouter.put(
@@ -28,7 +35,12 @@ workerRouter.put(
   accessMiddleware("admin"),
   updateWorkerController
 ); // update worker
-workerRouter.get("/get-single-worker", getSingleWorkerController);
+workerRouter.get(
+  "/get-single-worker",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getSingleWorkerController
+);
 workerRouter.delete(
   "/delete-worker",
   authMiddeware,
@@ -47,7 +59,7 @@ workerRouter.patch(
   accessMiddleware("admin"),
   makeInActiveWorker
 ); // InActive worker
-workerRouter.post(
+workerRouter.delete(
   "/multiple-delete-worker",
   authMiddeware,
   accessMiddleware("admin"),
@@ -60,8 +72,28 @@ workerRouter.get(
   searchWorkerController
 );
 
-workerRouter.post("/request-holiday", requestHoliday);
+workerRouter.post(
+  "/request-holiday",
+  authMiddeware,
+  accessMiddleware("admin"),
+  requestHoliday
+);
+workerRouter.get(
+  "/get-projects",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getAllProjectsToWorkerAddController
+);
+workerRouter.get(
+  "/get-positions",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getAllPositions
+);
+
 workerRouter.post("/request-sickness", requestSickness);
 workerRouter.get("/get-holiday", getHolidays);
 workerRouter.get("/get-sickness", getSickness);
+workerRouter.post("/signature", workerSignature);
+
 module.exports = workerRouter;

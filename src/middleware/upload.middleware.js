@@ -1,19 +1,14 @@
 const multer = require("multer");
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
-
-const cloudinary = require("cloudinary").v2;
-
-cloudinary.config({
-  cloud_name: process.env.CloudName,
-  api_key: process.env.CloudinaryApiKey,
-  api_secret: process.env.CloudinarySecretKey,
-});
+const { cloudinary } = require("../confing/cloudinaryConfig");
+const { AppError } = require("../utils/errorHandler");
 
 const allowedFormats = ["jpg", "jpeg", "png", "webp", "pdf"];
+
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
-    folder: "worker_hours_image",
+    folder: "worker_uploads",
     resource_type: "auto",
     format: async (req, file) => {
       const ext = file.mimetype.split("/")[1];
@@ -22,10 +17,17 @@ const storage = new CloudinaryStorage({
       }
       return ext;
     },
-    public_id: (req, file) => {
-      return `${Date.now()}-${file.originalname.split(".")[0]}`;
-    },
+    public_id: (req, file) =>
+      `${Date.now()}-${file.originalname.split(".")[0]}`,
   },
 });
-const hoursImageUpload = multer({ storage });
-module.exports = { cloudinary, hoursImageUpload };
+
+const upload = multer({ storage });
+
+/**
+ * IMPORTANT:
+ * upload.any() is REQUIRED because frontend uses:
+ * other_files.0.files
+ * other_files.1.files
+ */
+module.exports.uploadDocuments = upload.any();

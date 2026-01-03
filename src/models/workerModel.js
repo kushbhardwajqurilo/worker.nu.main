@@ -2,9 +2,11 @@ const mongoose = require("mongoose");
 
 const workerSchema = new mongoose.Schema(
   {
-    // ---- activation date ----
-    activation_date: { type: Date },
-
+    tenantId: {
+      type: String,
+      required: [true, "tenant Required"],
+      ref: "auth",
+    },
     // ---- worker personal details ----
     worker_personal_details: {
       firstName: {
@@ -12,7 +14,6 @@ const workerSchema = new mongoose.Schema(
         required: [true, "worker first name required"],
       },
       lastName: { type: String, default: "" },
-      phone_country: { type: String },
       phone: {
         type: String,
         required: [true, "worker phone number required"],
@@ -21,54 +22,24 @@ const workerSchema = new mongoose.Schema(
     },
 
     // ---- worker position ----
-    worker_position: {
-      type: String,
-    },
+    worker_position: [String],
 
     // ---- worker project ----
-    project: {
-      type: [
-        {
-          projectId: { type: String },
+    project: [
+      {
+        projectId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "project",
+          required: [true, "project required"],
         },
-      ],
-      default: [],
-    },
+      },
+    ],
 
     // ---- language ----
     language: {
-      type: String,
-      enum: {
-        values: ["English", "Russian", "Lithuanian"],
-        message: "Language must be either English, Russian or Lithuanian",
-      },
+      type: [String],
+      enum: ["english", "russian", "lithuanian"],
     },
-
-    // ---- worker hours access settings ----
-    worker_hours_access_settings: {
-      see_hours: { type: Boolean, default: false },
-      edit_hours: { type: Boolean, default: false },
-      add_new_worker: { type: Boolean, default: false },
-      add_new_project: { type: Boolean, default: false },
-      add_project_expense: { type: Boolean, default: false },
-      edit_company_project: { type: Boolean, default: false },
-    },
-
-    // ---- worker tool access settings ----
-    worker_tools_access_settings: {
-      change_tool_status: { type: Boolean, default: false },
-      see_company_tools: { type: Boolean, default: false },
-      scan_storage: { type: Boolean, default: false },
-      storage_inventorization: { type: Boolean, default: false },
-      add_new_tools: { type: Boolean, default: false },
-      edit_tools: { type: Boolean, default: false },
-      change_qr_code: { type: Boolean, default: false },
-    },
-
-    other_access_settings: {
-      make_worker_team_leader: { type: Boolean, default: false },
-    },
-
     worker_holiday: {
       remaining_holidays: { type: Number, default: 0 },
       holidays_per_month: { type: Number, default: 0 },
@@ -85,8 +56,6 @@ const workerSchema = new mongoose.Schema(
 
     // ---- worker personal information ----
     personal_information: {
-      upload_documents_enabled: { type: Boolean, default: false },
-
       documents: {
         profile_picture: { type: String, default: null },
         drivers_license: { type: String, default: null },
@@ -96,15 +65,13 @@ const workerSchema = new mongoose.Schema(
         other_files: {
           type: [
             {
-              fileName: { type: String },
+              folderName: { type: String },
               file: { type: String },
             },
           ],
           default: [],
         },
       },
-
-      personal_info: { type: Boolean, default: false },
       email: { type: String },
 
       date_of_birth: { type: Date },
@@ -129,21 +96,16 @@ const workerSchema = new mongoose.Schema(
         name: { type: String },
         surname: { type: String },
         email: { type: String },
-        phone_country: { type: String },
         phone_number: { type: String },
         notes: { type: String },
       },
-
-      clothing_sizes_enabled: { type: Boolean, default: false },
-
       clothing_sizes: {
-        suit_combo_size: { type: String },
+        suit_size: { type: String, default: null },
         tshirt_jacket_size: { type: String },
         pants_size: { type: String },
         shoes_size: { type: String },
+        additional_information: { type: String },
       },
-
-      additional_information: { type: String },
     },
 
     // ---- global flags ----
@@ -154,20 +116,29 @@ const workerSchema = new mongoose.Schema(
 
     urlAdminExpireAt: {
       type: Date,
-      default: () => Date.now() + 10 * 60 * 1000, // expires in 10 mins
+      default: () => Date.now() + 24 * 60 * 60 * 1000, // expires in 10 mins
     },
+    signature: { type: String, default: null },
+    isSign: { type: Boolean, default: false },
   },
   {
-    timestamps: false,
+    timestamps: true,
   }
 );
 
 // ==== WORKER POSITION SCHEMA FIXED ====
 const workerPositionSchema = new mongoose.Schema({
+  tenantId: {
+    type: String,
+    required: true,
+  },
   position: {
     type: String,
-    unique: [true, "position already exists"],
     required: [true, "position required"],
+  },
+  isDelete: {
+    type: Boolean,
+    default: false,
   },
 });
 
