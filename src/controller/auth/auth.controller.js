@@ -20,7 +20,7 @@ const generateAcessToken = (data) => {
       tenant: data.tenant,
     },
     process.env.ACCESS_TOKEN_KEY,
-    { expiresIn: "1m" }
+    { expiresIn: "15m" }
   );
 };
 
@@ -171,7 +171,7 @@ exports.refreshToken = catchAsync(async (req, res, next) => {
     const accessToken = jwt.sign(
       { id: payload.id, role: payload.role, tenant: tenantData.tenantId },
       process.env.ACCESS_TOKEN_KEY,
-      { expiresIn: "1m" } // 15 min
+      { expiresIn: "15m" } // 15 min
     );
 
     const newRefreshToken = await generateRefreshToken(

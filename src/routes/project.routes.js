@@ -3,6 +3,7 @@ const {
   getAllProjectsController,
   getSingleProjectController,
   updateProjectController,
+  workerList,
 } = require("../controller/project/project.controller");
 const {
   authMiddeware,
@@ -32,5 +33,11 @@ projectRouter.get(
   getSingleProjectController
 ); // get single project route
 
+projectRouter.get(
+  "/worker-list",
+  authMiddeware,
+  accessMiddleware("admin"),
+  workerList
+);
 projectRouter.patch("/update-project", updateProjectController); // update project route
 module.exports = projectRouter;

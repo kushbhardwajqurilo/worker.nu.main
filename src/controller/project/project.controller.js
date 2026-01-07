@@ -4,6 +4,8 @@ const { AppError, sendSuccess } = require("../../utils/errorHandler");
 const projectMode = require("../../models/projectMode");
 const { catchAsync } = require("../../utils/errorHandler");
 const { isValidCustomUUID } = require("custom-uuid-generator");
+const { default: mongoose } = require("mongoose");
+const { workerModel } = require("../../models/workerModel");
 
 exports.addProjectController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
@@ -58,16 +60,42 @@ exports.addProjectController = catchAsync(async (req, res, next) => {
 
 exports.getAllProjectsController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
+
   if (!tenantId) {
     return next(new AppError("Tenant Missing The Request", 400));
   }
+
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant", 400));
   }
-  const projects = await projectMode.find({ tenantId }).lean();
+
+  const projects = await projectMode
+    .find({ tenantId })
+    .populate({
+      path: "project_workers.workers",
+      select: "personal_information.documents.profile_picture",
+    })
+    .lean();
+
   if (!projects || projects.length === 0) {
-    return next(new AppError("No projects found", 400));
+    return next(new AppError("No projects found", 404));
   }
+
+  projects.forEach((project) => {
+    if (
+      project.project_workers &&
+      Array.isArray(project.project_workers.workers)
+    ) {
+      project.project_workers.workers = project.project_workers.workers.map(
+        (worker) => ({
+          _id: worker._id,
+          profile_picture:
+            worker.personal_information?.documents?.profile_picture ?? null,
+        })
+      );
+    }
+  });
+
   return sendSuccess(res, "Projects fetched successfully", projects, 200, true);
 });
 
@@ -154,3 +182,92 @@ exports.deleteProjectController = catchAsync(async (req, res, next) => {
 });
 
 // <----- delete project end ---------->
+
+// add existing worker in project
+exports.addWorkerInProject = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  const { w_id, p_id } = req.query;
+  if (!tenantId || tenantId.length === 0) {
+    return next(new AppError("tenant-id missig in the headers", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+  if (!w_id || w_id.length === 0) {
+    return next(new AppError("worker missing", 400));
+  }
+  if (!p_id || p_id.length === 0) {
+    return next(new AppError("project missing", 400));
+  }
+  if (!mongoose.Types.ObjectId.isValid(w_id)) {
+    return next(new AppError("Ivalid worker id", 400));
+  }
+  if (!mongoose.Types.ObjectId.isValid(p_id)) {
+    return next(new AppError("Ivalid project id", 400));
+  }
+  const project = await projectMode.findOne({
+    tenantId,
+    _id: p_id,
+    is_active: true,
+  });
+  if (!project) {
+    return next(new AppError("project not found try again later", 400));
+  }
+  // check already assigned or not
+  const assingedWorker = project.project_workers.workers.some(
+    (id) => is.toString() === w_id
+  );
+  if (assingedWorker) {
+    return next(new AppError("Worker already assigned to project", 400));
+  }
+
+  await projectMode.updateOne(
+    {
+      tenantId,
+      _id: p_id,
+    },
+    {
+      $addToSet: {
+        "project_workers.workers": w_id,
+      },
+    }
+  );
+
+  return sendSuccess(res, "worker added", {}, 201, true);
+});
+
+// worker list for project
+exports.workerList = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  const { p_id } = req.query;
+
+  if (!tenantId) {
+    return next(new AppError("tenant-id missing in headers", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+
+  // Get all active workers
+  const workers = await workerModel.find({
+    tenantId,
+    isDelete: false,
+    isActive: true,
+  });
+
+  if (!workers || workers.length === 0) {
+    return sendSuccess(res, "success", [], 200, true);
+  }
+
+  // Get project
+  const workersList = workers.map((val) => {
+    return {
+      _id: val._id,
+      firstName: val.worker_personal_details.firstName,
+      lastName: val.worker_personal_details.lastName,
+    };
+  });
+
+  return sendSuccess(res, "success", workersList, 200, true);
+});

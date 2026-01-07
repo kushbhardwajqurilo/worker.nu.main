@@ -2,6 +2,11 @@ const mongoose = require("mongoose");
 
 const workerHoursSchema = new mongoose.Schema(
   {
+    tenantId: {
+      type: String,
+      ref: "auth",
+      required: [true, "tenant required"],
+    },
     workerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "worker",

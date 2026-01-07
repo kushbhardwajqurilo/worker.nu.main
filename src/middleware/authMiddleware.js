@@ -65,8 +65,37 @@ const clientAuthMiddleware = catchAsync(async (req, res, next) => {
     return next(new AppError("Authorizaion Failed", 400));
   }
   req.client_id = clientInfo.client_id;
-  req.tenant = clientInfo.tenant;
+  req.tenantId = clientInfo.tenant;
   req.role = clientInfo.client_id;
   next();
 });
-module.exports = { authMiddeware, accessMiddleware, clientAuthMiddleware };
+const workerAuthMiddleware = catchAsync(async (req, res, next) => {
+  const authHeader = req.headers["authorization"];
+  if (!authHeader) {
+    return next(new AppError("Authorization missing", 400));
+  }
+  const worker_token = authHeader.split(" ")[1];
+  if (!worker_token) {
+    return next(new AppError("Token missing in the headers", 400));
+  }
+
+  let workerInfo;
+  try {
+    workerInfo = jwt.verify(worker_token, process.env.WORKER_KEY);
+  } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      return next(new AppError("Token has expired. Login Again.", 400));
+    }
+    return next(new AppError("Authorizaion Failed", 400));
+  }
+  req.worker_id = workerInfo.worker_id;
+  req.tenantId = workerInfo.tenant;
+  req.role = workerInfo.role;
+  next();
+});
+module.exports = {
+  authMiddeware,
+  accessMiddleware,
+  clientAuthMiddleware,
+  workerAuthMiddleware,
+};

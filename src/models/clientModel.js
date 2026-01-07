@@ -60,5 +60,5 @@ const clientSchema = new mongoose.Schema({
     default: false,
   },
 });
-
+clientSchema.index({ tenantId: 1, createdAt: -1 });
 module.exports = mongoose.model("client", clientSchema);

@@ -163,6 +163,7 @@ const puppeteer = require("puppeteer");
 const axios = require("axios");
 
 exports.createWorkerHours = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
   const { file } = req;
   // if (!file || file.length === 0 || file === undefined) {
   //   return next(new AppError("Image Required", 400));
@@ -178,6 +179,7 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
   } = req.body;
 
   const payload = {
+    tenantId,
     project: JSON.parse(project),
     start_working_hours: JSON.parse(start_working_hours),
     finish_hours: JSON.parse(finish_hours),

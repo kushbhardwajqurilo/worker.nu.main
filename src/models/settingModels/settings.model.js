@@ -1,113 +1,17 @@
 const mongoose = require("mongoose");
 
-// ================== CUSTOM FIELD ==================
-const customFieldSchema = new mongoose.Schema(
-  {
-    tenantId: {
-      type: String,
-      required: [true, "tenant-id Requird"],
-      ref: "auth",
-    },
-    type: {
-      type: String,
-
-      required: true,
-      uppercase: true,
-    },
-
-    label: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    defaultValue: {
-      type: String,
-      default: "",
-    },
-    description: {
-      type: String,
-      trim: true,
-    },
-
-    isRequired: {
-      type: Boolean,
-      default: false,
-    },
-
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-  },
-  { timestamps: true }
-);
-
-// ================== CUSTOM FIELD GROUP ==================
-const customFieldGroupSchema = new mongoose.Schema(
-  {
-    tenantId: {
-      type: String,
-      required: [true, "tenant-id required"],
-      ref: "auth",
-    },
-    groupName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    fields: [
-      {
-        type: {
-          type: String,
-          uppercase: true,
-        },
-
-        label: {
-          type: String,
-          trim: true,
-        },
-        defaultValue: {
-          type: String,
-          default: "",
-        },
-        description: {
-          type: String,
-          trim: true,
-        },
-
-        isRequired: {
-          type: Boolean,
-          default: false,
-        },
-
-        isActive: {
-          type: Boolean,
-          default: true,
-        },
-      },
-    ],
-    isRequired: {
-      type: Boolean,
-      default: false,
-    },
-    defaultValue: {
-      type: String,
-      default: "",
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-  },
-  { timestamps: true }
-);
+// ================== CUSTOM FIELD =================
 
 // hoildays and sickness
 
 const holidaySicknessSettingsSchema = new mongoose.Schema(
   {
-    tenantId: { type: String, required: [true, "tenant Required"] },
+    tenantId: {
+      type: String,
+      required: [true, "tenant Required"],
+      unique: true,
+      index: true,
+    },
     holiday: {
       enabled: {
         type: Boolean,
@@ -138,17 +42,11 @@ const holidaySicknessSettingsSchema = new mongoose.Schema(
 );
 
 // ================== MODELS ==================
-const CustomField = mongoose.model("CustomField", customFieldSchema);
-const CustomFieldGroup = mongoose.model(
-  "CustomFieldGroup",
-  customFieldGroupSchema
-);
+
 const HolidaySickness = mongoose.model(
   "leaves-setting",
   holidaySicknessSettingsSchema
 );
 module.exports = {
-  CustomField,
-  CustomFieldGroup,
   HolidaySickness,
 };

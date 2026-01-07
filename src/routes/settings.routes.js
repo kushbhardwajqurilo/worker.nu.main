@@ -29,5 +29,10 @@ settingsRouter.delete(
   deletePosition
 );
 // Holiday & sickness
-settingsRouter.post("/leaves", addOrUpdateHolidaySicknessSettings);
+settingsRouter.post(
+  "/leaves",
+  authMiddeware,
+  accessMiddleware("admin"),
+  addOrUpdateHolidaySicknessSettings
+);
 module.exports = settingsRouter;

@@ -9,6 +9,10 @@ const {
   approveWeek,
   dashboardHours,
 } = require("../controller/hours/hours.controller");
+const {
+  authMiddeware,
+  accessMiddleware,
+} = require("../middleware/authMiddleware");
 
 const hoursRouter = require("express").Router();
 
@@ -17,6 +21,8 @@ const hoursRouter = require("express").Router();
 /* ---------------- CREATE HOURS (Worker) ---------------- */
 hoursRouter.post(
   "/submit-hours",
+  authMiddeware,
+  accessMiddleware("admin"),
   hoursImageUpload.single("file"),
   createWorkerHours
 );

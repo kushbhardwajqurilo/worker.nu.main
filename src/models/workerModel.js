@@ -1,7 +1,9 @@
 const mongoose = require("mongoose");
+const workerCouterModel = require("./workerCouter.model");
 
 const workerSchema = new mongoose.Schema(
   {
+    id: { type: String, unique: true, index: true },
     tenantId: {
       type: String,
       required: [true, "tenant Required"],
@@ -22,7 +24,12 @@ const workerSchema = new mongoose.Schema(
     },
 
     // ---- worker position ----
-    worker_position: [String],
+    worker_position: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "worker_position",
+      },
+    ],
 
     // ---- worker project ----
     project: [
@@ -116,7 +123,7 @@ const workerSchema = new mongoose.Schema(
 
     urlAdminExpireAt: {
       type: Date,
-      default: () => Date.now() + 24 * 60 * 60 * 1000, // expires in 10 mins
+      default: () => Date.now() + 24 * 60 * 60 * 1000,
     },
     signature: { type: String, default: null },
     isSign: { type: Boolean, default: false },
@@ -146,6 +153,27 @@ const workerPositionModel = mongoose.model(
   "worker_position",
   workerPositionSchema
 );
+
+workerSchema.pre("save", async function () {
+  // if already generated
+  if (this.id) return;
+
+  const counter = await workerCouterModel.findOneAndUpdate(
+    {
+      tenantId: this.tenantId,
+      key: "worker",
+    },
+    {
+      $inc: { seq: 1 },
+    },
+    {
+      new: true,
+      upsert: true,
+    }
+  );
+
+  this.id = `E-${counter.seq}`;
+});
 
 const workerModel = mongoose.model("worker", workerSchema);
 module.exports = { workerModel, workerPositionModel };

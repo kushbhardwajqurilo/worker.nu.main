@@ -74,7 +74,7 @@ const sicknessSchema = new mongoose.Schema({
       required: true,
     },
   },
-  discription: {
+  description: {
     type: String,
     required: true,
   },

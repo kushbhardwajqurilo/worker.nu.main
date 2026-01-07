@@ -16,6 +16,8 @@ const {
 } = require("../../models/settingModels/settings.model");
 const uploadSignature = require("../../middleware/signature.middleware");
 const projectMode = require("../../models/projectMode");
+const hoursModel = require("../../models/hoursModel");
+const { calculateAge, formatDateUTC } = require("../../utils/calcuateAge");
 
 // ----------------------------------------- ADMIN DASHBOARD API'S -----------------------------------------------
 
@@ -161,6 +163,15 @@ exports.addWorker = catchAsync(async (req, res, next) => {
     return next(new AppError("Worker phone already registered", 400));
   }
 
+  let worker_economical_data = req.body.worker_economical_data;
+  if (typeof worker_economical_data === "string") {
+    worker_economical_data = JSON.parse(worker_economical_data);
+  }
+
+  let isActive = req.body.isActive;
+  if (typeof isActive === "string") {
+    isActive = JSON.parse(isActive);
+  }
   // ================= LANGUAGE PARSE =================
   let language = req.body.language || [];
   if (typeof language === "string") {
@@ -173,7 +184,16 @@ exports.addWorker = catchAsync(async (req, res, next) => {
   if (typeof project === "string") {
     project = JSON.parse(project);
   }
+  let worker_position = req.body.worker_position || [];
 
+  if (typeof worker_position === "string") {
+    worker_position = JSON.parse(worker_position);
+  }
+
+  // Ensure ObjectId array
+  worker_position = worker_position.map(
+    (id) => new mongoose.Types.ObjectId(id)
+  );
   // ================= PARSE personal_information =================
   let personalInformation = req.body.personal_information;
   if (typeof personalInformation === "string") {
@@ -243,6 +263,9 @@ exports.addWorker = catchAsync(async (req, res, next) => {
     tenantId,
     ...req.body,
     project, // ✅ parsed
+    worker_position,
+    worker_economical_data,
+    isActive,
     worker_personal_details: workerPersonalDetails,
     language,
     personal_information: {
@@ -250,7 +273,6 @@ exports.addWorker = catchAsync(async (req, res, next) => {
       documents,
     },
   };
-
   // ================= CREATE WORKER =================
   const worker = await workerModel.create(payload);
 
@@ -271,9 +293,16 @@ exports.addWorker = catchAsync(async (req, res, next) => {
     worker.worker_holiday.remaining_sickness =
       holidaySetting.sickness.monthly_limit;
   }
-
+  const worker_token = jwt.sign(
+    {
+      worker_id: worker._id,
+      tenant: tenantId,
+      role: "worker",
+    },
+    process.env.WORKER_KEY
+  );
   // ================= DASHBOARD LINK =================
-  worker.dashboardUrl = `http://localhost:3000/worker?w_id=${worker._id}`;
+  worker.dashboardUrl = `http://localhost:3000/worker?w_id=${worker._id}&tkn=${worker_token}`;
   worker.urlVisibleToAdmin = true;
   worker.urlAdminExpireAt = Date.now() + 24 * 60 * 60 * 1000;
 
@@ -286,29 +315,409 @@ exports.addWorker = catchAsync(async (req, res, next) => {
 
 exports.getSingleWorkerController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
-  if (!isValidCustomUUID(tenantId)) {
-    return next(new AppError("Invalid Tenatn-id", 400));
-  }
   const { worker_id } = req.query;
-  if (!worker_id || worker_id.toString().trim().length === 0) {
-    return next(new AppError("worker credentials missing", 400));
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid tenant-id", 400));
   }
 
-  const isWorker = await workerModel.findOne({
-    tenantId: tenantId,
-    _id: worker_id,
-  });
-  if (!isWorker) {
-    return next(new AppError("worker not found", 400));
+  if (!worker_id?.trim()) {
+    return next(new AppError("Worker id is required", 400));
   }
 
-  // worker ke liye link always active
-  return sendSuccess(res, "worker found", isWorker, 200, true);
+  // ================= BASE DATA =================
+  const [worker, hoursTime, holidayData, sicknessData] = await Promise.all([
+    workerModel
+      .findOne({
+        tenantId,
+        _id: worker_id,
+        isDelete: false,
+        isActive: true,
+      })
+      .select(
+        `-_id
+         -tenantId
+         -worker_position
+         -language
+         -isDelete
+         -isActive
+         -dashboardUrl
+         -urlVisibleToAdmin
+         -signature
+         -isSign
+         -urlAdminExpireAt
+         -updatedAt
+         -__v`
+      )
+      .lean(),
+
+    hoursModel
+      .findOne({ tenantId, workerId: worker_id })
+      .sort({ createdAt: -1 })
+      .select("total_hours createdAt")
+      .lean(),
+
+    holidayModel
+      .find({ tenantId, workerId: worker_id, status: "approve" })
+      .lean(),
+
+    sicknessModel
+      .find({ tenantId, workerId: worker_id, status: "approve" })
+      .lean(),
+  ]);
+
+  if (!worker) {
+    return next(new AppError("Worker not found", 404));
+  }
+
+  // ================= HELPERS =================
+  const formatDate = (date) => new Date(date).toLocaleDateString("en-GB");
+
+  const daysAgo = (date) =>
+    Math.floor((Date.now() - new Date(date)) / (1000 * 60 * 60 * 24));
+
+  const today = new Date();
+
+  // ================= HOLIDAY =================
+  let lastHoliday = null;
+  let nextHoliday = null;
+
+  if (holidayData?.length) {
+    lastHoliday =
+      holidayData
+        .filter(
+          (h) => h.duration?.endDate && new Date(h.duration.endDate) < today
+        )
+        .sort(
+          (a, b) => new Date(b.duration.endDate) - new Date(a.duration.endDate)
+        )[0] || null;
+
+    nextHoliday =
+      holidayData
+        .filter(
+          (h) => h.duration?.startDate && new Date(h.duration.startDate) > today
+        )
+        .sort(
+          (a, b) =>
+            new Date(a.duration.startDate) - new Date(b.duration.startDate)
+        )[0] || null;
+  }
+
+  const holiday = {
+    last_holiday: lastHoliday
+      ? `${formatDate(lastHoliday.duration.endDate)} (${daysAgo(
+          lastHoliday.duration.endDate
+        )} days ago)`
+      : null,
+    next_holiday: nextHoliday
+      ? formatDate(nextHoliday.duration.startDate)
+      : null,
+  };
+
+  // ================= SICKNESS =================
+  let lastSickness = null;
+  let totalSickDays = 0;
+
+  if (sicknessData?.length) {
+    totalSickDays = sicknessData.reduce(
+      (sum, s) => sum + (s.duration?.totalDays || 0),
+      0
+    );
+
+    lastSickness =
+      sicknessData
+        .filter((s) => s.duration?.endDate)
+        .sort(
+          (a, b) => new Date(b.duration.endDate) - new Date(a.duration.endDate)
+        )[0] || null;
+  }
+
+  const HOURS_PER_DAY = 8;
+  const totalWorkingDays = hoursTime?.total_hours
+    ? hoursTime.total_hours / HOURS_PER_DAY
+    : 0;
+
+  const sickVsWorkPercent =
+    totalWorkingDays > 0
+      ? Number(((totalSickDays / totalWorkingDays) * 100).toFixed(2))
+      : 0;
+
+  const sickness = {
+    last_sickness_day: lastSickness
+      ? `${formatDate(lastSickness.duration.endDate)} (${daysAgo(
+          lastSickness.duration.endDate
+        )} days ago)`
+      : null,
+    total_sick_days: totalSickDays,
+    percentage: `${sickVsWorkPercent}%`,
+  };
+
+  // ================= ACTIVE PROJECTS =================
+  const startOfThisMonth = new Date();
+  startOfThisMonth.setDate(1);
+  startOfThisMonth.setHours(0, 0, 0, 0);
+
+  const endOfThisMonth = new Date();
+
+  const startOfLastMonth = new Date(startOfThisMonth);
+  startOfLastMonth.setMonth(startOfLastMonth.getMonth() - 1);
+
+  const endOfLastMonth = new Date(startOfThisMonth);
+  endOfLastMonth.setMilliseconds(-1);
+
+  const [activeProjectsThisMonth, activeProjectsLastMonth] = await Promise.all([
+    // THIS MONTH
+    hoursModel.aggregate([
+      {
+        $match: {
+          tenantId,
+          workerId: new mongoose.Types.ObjectId(worker_id),
+          "project.project_date": {
+            $gte: startOfThisMonth,
+            $lte: endOfThisMonth,
+          },
+        },
+      },
+      { $group: { _id: "$project.projectId" } },
+      {
+        $lookup: {
+          from: "projects",
+          localField: "_id",
+          foreignField: "_id",
+          as: "project",
+        },
+      },
+      { $unwind: "$project" },
+      {
+        $project: {
+          _id: "$project._id",
+          project_name: "$project.project_name",
+        },
+      },
+    ]),
+
+    // LAST MONTH
+    hoursModel.aggregate([
+      {
+        $match: {
+          tenantId,
+          workerId: new mongoose.Types.ObjectId(worker_id),
+          "project.project_date": {
+            $gte: startOfLastMonth,
+            $lte: endOfLastMonth,
+          },
+        },
+      },
+      { $group: { _id: "$project.projectId" } },
+      {
+        $lookup: {
+          from: "projects",
+          localField: "_id",
+          foreignField: "_id",
+          as: "project",
+        },
+      },
+      { $unwind: "$project" },
+      {
+        $project: {
+          _id: "$project._id",
+          project_name: "$project.project_name",
+        },
+      },
+    ]),
+  ]);
+
+  // ================= PROFESSIONAL =================
+  const professionalDetails = {
+    user_created: formatDateUTC(worker.createdAt),
+    worked_time: hoursTime?.total_hours ? `${hoursTime.total_hours}h` : "0h",
+    last_hour_register: formatDateUTC(hoursTime?.createdAt) || null,
+    hourly_salary:
+      `$${worker.worker_economical_data?.worker_hourly_salary}` ?? 0,
+  };
+
+  // ================= AGE =================
+  const age = calculateAge(worker.personal_information.date_of_birth);
+  worker.personal_information.age = age;
+
+  delete worker.worker_holiday;
+
+  // ================= RESPONSE =================
+  const responseData = {
+    ...worker,
+    professional_details: professionalDetails,
+    holiday,
+    sickness,
+    projects: {
+      this_month: activeProjectsThisMonth,
+      last_month: activeProjectsLastMonth,
+    },
+  };
+
+  return sendSuccess(
+    res,
+    "Worker fetched successfully",
+    [responseData],
+    200,
+    true
+  );
 });
 
 // <---------- Get Single Worker End ------------->
 
 // <---------- Update worker Start ---------------->
+
+// exports.updateWorkerController = catchAsync(async (req, res, next) => {
+//   console.log("RAW BODY 👉", req.body);
+
+//   const { tenantId } = req;
+
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid Tenant-id", 400));
+//   }
+
+//   const { w_id } = req.query;
+//   if (!w_id) {
+//     return next(new AppError("Worker credential missing", 400));
+//   }
+
+//   // ================= SAFE JSON PARSER =================
+//   const safeParse = (value) => {
+//     if (typeof value === "string") {
+//       try {
+//         return JSON.parse(value);
+//       } catch {
+//         return value;
+//       }
+//     }
+//     return value;
+//   };
+
+//   // ================= PARSE MULTIPART BODY =================
+//   let data = {};
+//   if (req.body && Object.keys(req.body).length > 0) {
+//     data = {
+//       worker_personal_details: safeParse(req.body.worker_personal_details),
+//       worker_position: safeParse(req.body.worker_position),
+//       project: safeParse(req.body.project),
+//       language: safeParse(req.body.language),
+//       worker_economical_data: safeParse(req.body.worker_economical_data),
+//       personal_information: safeParse(req.body.personal_information),
+//     };
+//   }
+
+//   if (!data || Object.keys(data).length === 0) {
+//     return next(new AppError("Worker details missing", 400));
+//   }
+
+//   // ================= FIND WORKER =================
+//   const worker = await workerModel.findOne({ tenantId, _id: w_id });
+//   if (!worker) {
+//     return next(new AppError("Worker not found", 400));
+//   }
+
+//   // ================= PHONE DUPLICATE CHECK =================
+//   if (data.worker_personal_details?.phone) {
+//     const isPhoneExist = await workerModel.findOne({
+//       tenantId,
+//       "worker_personal_details.phone": data.worker_personal_details.phone,
+//       _id: { $ne: w_id },
+//     });
+
+//     if (isPhoneExist) {
+//       return next(new AppError("Phone number already in use", 400));
+//     }
+//   }
+
+//   // ================= FILE HANDLING =================
+//   const documentsUpdate = {};
+//   const otherFilesMap = {};
+
+//   if (Array.isArray(req.files)) {
+//     req.files.forEach((file) => {
+//       const field = file.fieldname;
+
+//       if (field === "profile_picture") {
+//         documentsUpdate["personal_information.documents.profile_picture"] =
+//           file.path;
+//       }
+
+//       if (field === "drivers_license") {
+//         documentsUpdate["personal_information.documents.drivers_license"] =
+//           file.path;
+//       }
+
+//       if (field === "passport") {
+//         documentsUpdate["personal_information.documents.passport"] = file.path;
+//       }
+
+//       if (field === "national_id_card") {
+//         documentsUpdate["personal_information.documents.national_id_card"] =
+//           file.path;
+//       }
+
+//       if (field === "worker_work_id") {
+//         documentsUpdate["personal_information.documents.worker_work_id"] =
+//           file.path;
+//       }
+
+//       // -------- OTHER FILES --------
+//       const match = field.match(/other_files\.(\d+)\.files/);
+//       if (match) {
+//         const index = match[1];
+
+//         if (!otherFilesMap[index]) {
+//           otherFilesMap[index] = {
+//             folderName:
+//               req.body[`other_files.${index}.folder_name`] || "other_files",
+//             files: [],
+//           };
+//         }
+
+//         otherFilesMap[index].files.push(file.path);
+//       }
+//     });
+//   }
+
+//   // merge old + new other_files
+//   if (Object.keys(otherFilesMap).length > 0) {
+//     const existingOtherFiles =
+//       worker.personal_information?.documents?.other_files || [];
+
+//     const newOtherFiles = Object.values(otherFilesMap).flatMap((folder) =>
+//       folder.files.map((fileUrl) => ({
+//         folderName: folder.folderName,
+//         file: fileUrl,
+//       }))
+//     );
+
+//     documentsUpdate["personal_information.documents.other_files"] = [
+//       ...existingOtherFiles,
+//       ...newOtherFiles,
+//     ];
+//   }
+
+//   // ================= FINAL UPDATE PAYLOAD =================
+//   const updatePayload = {
+//     ...data,
+//     ...(Object.keys(documentsUpdate).length > 0 ? documentsUpdate : {}),
+//   };
+
+//   // ================= UPDATE DB =================
+//   const updatedWorker = await workerModel.findOneAndUpdate(
+//     { tenantId, _id: w_id },
+//     { $set: updatePayload },
+//     { new: true, runValidators: true }
+//   );
+
+//   return sendSuccess(
+//     res,
+//     "Worker updated successfully",
+//     updatedWorker,
+//     200,
+//     true
+//   );
+// });
 
 exports.updateWorkerController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
@@ -321,91 +730,119 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
     return next(new AppError("Worker credential missing", 400));
   }
 
-  // ================= PARSE JSON DATA =================
-  let data = {};
-  if (req.body) {
-    try {
-      data = req.body;
-      console.log("data", data);
-    } catch (err) {
-      return next(new AppError("Invalid JSON format in data field", 400));
+  // ---------- SAFE JSON PARSE ----------
+  const safeParse = (v) => {
+    if (typeof v === "string") {
+      try {
+        return JSON.parse(v);
+      } catch {
+        return v;
+      }
     }
-  }
-
-  if (!data || Object.keys(data).length === 0) {
-    return next(new AppError("Worker details missing", 400));
-  }
-
-  // ================= FIND WORKER =================
-  const worker = await workerModel.findOne({ tenantId, _id: w_id });
-  if (!worker) {
-    return next(new AppError("Worker not found", 400));
-  }
-
-  // ================= PHONE DUPLICATE CHECK =================
-  if (data.worker_personal_details?.phone) {
-    const isPhoneExist = await workerModel.findOne({
-      tenantId,
-      "worker_personal_details.phone": data.worker_personal_details.phone,
-      _id: { $ne: w_id },
-    });
-
-    if (isPhoneExist) {
-      return next(new AppError("Phone number already in use", 400));
-    }
-  }
-
-  // ================= FILE HANDLING (SAFE) =================
-  const files = req.files || {};
-  const documentsUpdate = {};
-
-  if (files.profile_picture?.length) {
-    documentsUpdate["personal_information.documents.profile_picture"] =
-      files.profile_picture[0].path;
-  }
-
-  if (files.drivers_license?.length) {
-    documentsUpdate["personal_information.documents.drivers_license"] =
-      files.drivers_license[0].path;
-  }
-
-  if (files.passport?.length) {
-    documentsUpdate["personal_information.documents.passport"] =
-      files.passport[0].path;
-  }
-
-  if (files.national_id_card?.length) {
-    documentsUpdate["personal_information.documents.national_id_card"] =
-      files.national_id_card[0].path;
-  }
-
-  if (files.worker_work_id?.length) {
-    documentsUpdate["personal_information.documents.worker_work_id"] =
-      files.worker_work_id[0].path;
-  }
-
-  if (files.other_files?.length) {
-    const newOtherFiles = files.other_files.map((file) => ({
-      folderName: "other_files",
-      file: file.path,
-    }));
-
-    documentsUpdate["personal_information.documents.other_files"] = [
-      ...(worker.personal_information?.documents?.other_files || []),
-      ...newOtherFiles,
-    ];
-  }
-
-  // ================= FINAL UPDATE PAYLOAD =================
-  const updatePayload = {
-    ...data,
-    ...(Object.keys(documentsUpdate).length > 0 ? documentsUpdate : {}),
+    return v;
   };
 
-  // ================= UPDATE DB =================
+  // ---------- PARSE BODY ----------
+  let data = {
+    worker_personal_details: safeParse(req.body.worker_personal_details),
+    worker_position: safeParse(req.body.worker_position),
+    project: safeParse(req.body.project),
+    language: safeParse(req.body.language),
+    worker_economical_data: safeParse(req.body.worker_economical_data),
+    personal_information: safeParse(req.body.personal_information),
+    isActive: safeParse(req.body.isActive),
+  };
+
+  // ---------- upload_docs -> documents FIX ----------
+  if (data.personal_information?.upload_docs) {
+    data.personal_information.documents = data.personal_information.upload_docs;
+    delete data.personal_information.upload_docs;
+  }
+
+  // ---------- FIND WORKER ----------
+  const worker = await workerModel.findOne({ tenantId, _id: w_id });
+  if (!worker) {
+    return next(new AppError("Worker not found", 404));
+  }
+
+  // ---------- FILE HANDLING ----------
+  const documentsUpdate = {};
+  const otherFilesToPush = [];
+
+  if (Array.isArray(req.files)) {
+    req.files.forEach((file) => {
+      const field = file.fieldname;
+
+      // ---- SINGLE DOCUMENTS ----
+      if (
+        [
+          "profile_picture",
+          "drivers_license",
+          "passport",
+          "national_id_card",
+          "worker_work_id",
+        ].includes(field)
+      ) {
+        documentsUpdate[`personal_information.documents.${field}`] = file.path;
+      }
+
+      // ---- OTHER FILES ----
+      const match = field.match(/other_files\.(\d+)\.files/);
+      if (match) {
+        const index = Number(match[1]);
+        const exists =
+          worker.personal_information?.documents?.other_files?.[index];
+
+        const folderName =
+          req.body[`other_files.${index}.folder_name`] ||
+          exists?.folderName ||
+          "other_files";
+
+        if (exists) {
+          // UPDATE
+          documentsUpdate[
+            `personal_information.documents.other_files.${index}.file`
+          ] = file.path;
+
+          documentsUpdate[
+            `personal_information.documents.other_files.${index}.folderName`
+          ] = folderName;
+        } else {
+          // ADD
+          otherFilesToPush.push({
+            folderName,
+            file: file.path,
+          });
+        }
+      }
+    });
+  }
+
+  // ---------- 🚨 PREVENT MONGO PATH CONFLICT ----------
+  if (Object.keys(documentsUpdate).length > 0 || otherFilesToPush.length > 0) {
+    delete data.personal_information;
+  }
+
+  // ---------- FINAL UPDATE QUERY ----------
+  const updateQuery = {
+    $set: {
+      ...data,
+      ...documentsUpdate,
+    },
+  };
+
+  if (otherFilesToPush.length > 0) {
+    updateQuery.$push = {
+      "personal_information.documents.other_files": {
+        $each: otherFilesToPush,
+      },
+    };
+  }
+
+  // ---------- UPDATE DB ----------
   const updatedWorker = await workerModel.findOneAndUpdate(
     { tenantId, _id: w_id },
-    { $set: updatePayload },
+    updateQuery,
     { new: true, runValidators: true }
   );
 
@@ -485,30 +922,98 @@ exports.multipleDeleteWorkerController = catchAsync(async (req, res, next) => {
 
 exports.getAllWorkerController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
+
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant-id", 400));
   }
-  const workerList = await workerModel.find({
+
+  // ================= PAGINATION =================
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 5;
+  const skip = (page - 1) * limit;
+
+  // ================= QUERY =================
+  const query = {
     tenantId: tenantId,
     isDelete: { $ne: true },
-  });
-  if (!workerList || workerList.length === 0) {
-    return next(new AppError("No worker found", 400));
+    isActive: { $ne: false },
+  };
+
+  const totalCount = await workerModel.countDocuments(query);
+
+  if (totalCount === 0) {
+    return sendSuccess(res, "no data found", [], 200, true);
   }
 
-  // Modify admin visibility
+  const totalPage = Math.ceil(totalCount / limit);
+
+  // 🔥 NEW CONDITION: page > totalPage
+  if (page > totalPage) {
+    return sendSuccess(
+      res,
+      "No page found",
+      {
+        total: totalCount,
+        page,
+        limit,
+        totalPage,
+        worker: [],
+      },
+      200,
+      true
+    );
+  }
+
+  const workerList = await workerModel
+    .find(query)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .populate([
+      {
+        path: "project.projectId",
+        select: "_id project_details",
+      },
+      {
+        path: "worker_position",
+        select: "_id position",
+        match: { isDelete: false }, // safety
+      },
+    ])
+    .lean();
+
+  // ================= MODIFY ADMIN VISIBILITY =================
   const updatedList = workerList.map((worker) => {
-    if (worker.urlAdminExpireAt && Date.now() > worker.urlAdminExpireAt) {
-      worker.urlVisibleToAdmin = false;
-    }
+    const isExpired =
+      worker.urlAdminExpireAt && Date.now() > worker.urlAdminExpireAt;
 
     return {
-      ...worker._doc,
-      dashboardUrl: worker.urlVisibleToAdmin ? worker.dashboardUrl : null,
+      ...worker,
+      project: worker.project.map((p) => ({
+        _id: p._id,
+        projectId: p.projectId?._id || null,
+        project_name: p.projectId?.project_details?.project_name || null,
+      })),
+      dashboardUrl:
+        !isExpired && worker.urlVisibleToAdmin ? worker.dashboardUrl : null,
+      urlVisibleToAdmin: !isExpired && worker.urlVisibleToAdmin,
     };
   });
 
-  return sendSuccess(res, "data found", updatedList, 200, true);
+  // ================= RESPONSE =================
+  return sendSuccess(
+    res,
+    "data found",
+    {
+      total: totalCount,
+      page,
+      limit,
+      totalPage,
+      worker: updatedList,
+    },
+    200,
+    true
+  );
 });
 
 // <---------- get all worker list end here -------------->
@@ -580,6 +1085,7 @@ exports.searchWorkerController = catchAsync(async (req, res, next) => {
   return sendSuccess(res, "Workers fetched successfully", workers, 200, true);
 });
 
+//  this controller for project list with name or id  for worker to assing project
 exports.getAllProjectsToWorkerAddController = catchAsync(
   async (req, res, next) => {
     const { tenantId } = req;
@@ -612,9 +1118,10 @@ exports.getAllProjectsToWorkerAddController = catchAsync(
 
 // <---------- Holiday / Sickness ------------>
 exports.requestHoliday = catchAsync(async (req, res, next) => {
-  const { tenantId, w_id } = req.query;
+  const { tenantId } = req;
+  const { w_id } = req.query;
   if (!isValidCustomUUID(tenantId)) {
-    return next(new AppError("Invalid Tenatn-id", 400));
+    return next(new AppError("Invalid tenant-id", 400));
   }
 
   if (!w_id) {
@@ -656,6 +1163,7 @@ exports.requestHoliday = catchAsync(async (req, res, next) => {
     Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
 
   const payload = {
+    tenantId,
     workerId: w_id,
     duration: {
       startDate,
@@ -677,6 +1185,7 @@ exports.requestHoliday = catchAsync(async (req, res, next) => {
 });
 
 exports.requestSickness = catchAsync(async (req, res, next) => {
+  // console.log(req.body);
   const { tenantId } = req;
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenatn-id", 400));
@@ -692,12 +1201,12 @@ exports.requestSickness = catchAsync(async (req, res, next) => {
     return next(new AppError("Invalid w_id", 400));
   }
 
-  const { range, discription } = req.body;
+  const { range, description } = req.body;
 
   // ✅ body validation
-  if (!range || !range.startDate || !range.endDate || !discription) {
+  if (!range || !range.startDate || !range.endDate || !description) {
     return next(
-      new AppError("startDate, endDate and discription are required", 400)
+      new AppError("startDate, endDate and description are required", 400)
     );
   }
 
@@ -730,7 +1239,7 @@ exports.requestSickness = catchAsync(async (req, res, next) => {
       endDate,
       totalDays,
     },
-    discription,
+    description,
   };
 
   const leaveRequest = await sicknessModel.create(payload);

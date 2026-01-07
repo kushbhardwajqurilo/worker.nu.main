@@ -16,45 +16,212 @@ const { isValidCustomUUID } = require("custom-uuid-generator");
 //get leaves for admin
 exports.getHolidayRequest = catchAsync(async (req, res, next) => {
   const { admin_id, tenantId } = req;
-  if (tenantId) {
+
+  if (!tenantId) {
     return next(new AppError("tenant-id missing", 400));
   }
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("invalid tenant-id", 400));
   }
   if (!mongoose.Types.ObjectId.isValid(admin_id)) {
-    return next("invalid admin credentials");
+    return next(new AppError("invalid admin credentials", 400));
   }
 
-  const admin = await adminModel.findOne({ tenantId, _idadmin_id });
+  const admin = await adminModel.findOne({ tenantId, _id: admin_id });
   if (!admin) {
     return next(new AppError("invalid admin", 400));
   }
-  const result = await holidayModel.find({ tenantId, status: "pending" });
-  if (!result) {
-    return next(new AppError("now holiday request found.", 400));
+
+  // ================= PAGINATION =================
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(parseInt(req.query.limit, 10) || 5, 100);
+  const skip = (page - 1) * limit;
+
+  // ================= TOTAL COUNT =================
+  const totalRecords = await holidayModel.countDocuments({ tenantId });
+
+  // ================= FETCH DATA =================
+  const result = await holidayModel
+    .find({ tenantId })
+    .sort({ requestedDate: -1 }) // latest first (recommended)
+    .skip(skip)
+    .limit(limit)
+    .populate({
+      path: "workerId",
+      select:
+        "-worker_personal_details.phone -project -language -worker_holiday.sickness_holidays -worker_holiday.sickness_per_month -worker_holiday.sickness_taken -worker_economical_data -isDelete -isActive -dashboardUrl -urlVisibleToAdmin -signature -isSign -urlAdminExpireAt -personal_information.bank_details -personal_information.address_details -personal_information.close_contact -personal_information.clothing_sizes -personal_information.documents.drivers_license -personal_information.documents.passport -personal_information.documents.national_id_card -personal_information.documents.worker_work_id -personal_information.documents.other_files -createdAt -updatedAt -__v -personal_information.email -personal_information.date_of_birth",
+      populate: {
+        path: "worker_position",
+        model: "worker_position",
+        select: "_id position",
+      },
+    })
+    .lean();
+
+  if (!result || result.length === 0) {
+    return sendSuccess(
+      res,
+      "holiday request found",
+      {
+        data: [],
+        page,
+        limit,
+        total: totalRecords,
+        totalPages: Math.ceil(totalRecords / limit),
+      },
+      200,
+      true
+    );
   }
-  return sendSuccess(res, "holiday request found", result, 200, true);
+
+  // ================= STRUCTURE DATA =================
+  const structuredData = result.map((item) => ({
+    holiday_id: item._id,
+    status: item.status,
+    description: item.reason,
+    requestedDate: item.requestedDate,
+    approvedAt: item.approvedAt || null,
+
+    duration: {
+      startDate: item.duration.startDate,
+      endDate: item.duration.endDate,
+      totalDays: item.duration.totalDays,
+      remaining_days: item.workerId.worker_holiday.remaining_holidays,
+    },
+
+    worker: {
+      worker_id: item.workerId._id,
+      worker_code: item.workerId.id,
+      name: `${item.workerId.worker_personal_details?.firstName || ""} ${
+        item.workerId.worker_personal_details?.lastName || ""
+      }`.trim(),
+      position: item.workerId.worker_position?.map((p) => p.position) || [],
+      profile_picture:
+        item.workerId.personal_information?.documents?.profile_picture || null,
+    },
+  }));
+
+  // ================= RESPONSE =================
+  return sendSuccess(
+    res,
+    "holiday request found",
+    {
+      data: structuredData,
+      page,
+      limit,
+      total: totalRecords,
+      totalPages: Math.ceil(totalRecords / limit),
+    },
+    200,
+    true
+  );
 });
 
 // get sick leave request
 exports.getSicknessRequest = catchAsync(async (req, res, next) => {
   const { admin_id, tenantId } = req;
-  if (tenantId) {
+
+  if (!tenantId) {
     return next(new AppError("tenant-id missing", 400));
   }
+
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("invalid tenant-id", 400));
   }
+
+  if (!mongoose.Types.ObjectId.isValid(admin_id)) {
+    return next(new AppError("invalid admin credentials", 400));
+  }
+
   const admin = await adminModel.findOne({ tenantId, _id: admin_id });
   if (!admin) {
     return next(new AppError("invalid admin", 400));
   }
-  const result = await sicknessModel.find({ tenantId, status: "pending" });
-  if (!result) {
-    return next(new AppError("sickness request found.", 400));
+
+  // ================= PAGINATION =================
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(parseInt(req.query.limit, 10) || 5, 100);
+  const skip = (page - 1) * limit;
+
+  // ================= TOTAL COUNT =================
+  const totalRecords = await sicknessModel.countDocuments({ tenantId });
+
+  // ================= FETCH DATA =================
+  const result = await sicknessModel
+    .find({ tenantId })
+    .sort({ requestedDate: -1 }) // latest first
+    .skip(skip)
+    .limit(limit)
+    .populate({
+      path: "workerId",
+      select:
+        "-worker_personal_details.phone -project -language -worker_holiday.remaining_holidays -worker_holiday.holidays_per_month -worker_holiday.holidays_taken -worker_economical_data -isDelete -isActive -dashboardUrl -urlVisibleToAdmin -signature -isSign -urlAdminExpireAt -personal_information.bank_details -personal_information.address_details -personal_information.close_contact -personal_information.clothing_sizes -personal_information.documents.drivers_license -personal_information.documents.passport -personal_information.documents.national_id_card -personal_information.documents.worker_work_id -personal_information.documents.other_files -createdAt -updatedAt -__v -personal_information.email -personal_information.date_of_birth",
+      populate: {
+        path: "worker_position",
+        model: "worker_position",
+        select: "_id position",
+      },
+    })
+    .lean();
+
+  // ================= EMPTY SAFE RESPONSE =================
+  if (!result || result.length === 0) {
+    return sendSuccess(
+      res,
+      "sickness requests found",
+      {
+        data: [],
+        page,
+        limit,
+        total: totalRecords,
+        totalPages: Math.ceil(totalRecords / limit),
+      },
+      200,
+      true
+    );
   }
-  return sendSuccess(res, "sickeness requests found", result, 200, true);
+
+  // ================= STRUCTURE DATA =================
+  const structuredData = result.map((item) => ({
+    sickness_id: item._id,
+    status: item.status,
+    description: item.reason || null,
+    requestedDate: item.requestedDate,
+    approvedAt: item.approvedAt || null,
+
+    duration: {
+      startDate: item.duration?.startDate || null,
+      endDate: item.duration?.endDate || null,
+      totalDays: item.duration?.totalDays || 0,
+      remaining_days: item.workerId.worker_holiday.remaining_sickness,
+    },
+
+    worker: {
+      worker_id: item.workerId._id,
+      worker_code: item.workerId.id,
+      name: `${item.workerId.worker_personal_details?.firstName || ""} ${
+        item.workerId.worker_personal_details?.lastName || ""
+      }`.trim(),
+      position: item.workerId.worker_position?.map((p) => p.position) || [],
+      profile_picture:
+        item.workerId.personal_information?.documents?.profile_picture || null,
+    },
+  }));
+
+  // ================= RESPONSE =================
+  return sendSuccess(
+    res,
+    "sickness requests found",
+    {
+      data: structuredData,
+      page,
+      limit,
+      total: totalRecords,
+      totalPages: Math.ceil(totalRecords / limit),
+    },
+    200,
+    true
+  );
 });
 
 // approve holiday request
@@ -93,10 +260,10 @@ exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
     if (!sickness) {
       return next(new AppError("sickness request not found", 400));
     }
-    if (sickness.status === "approve") {
+    if (sickness.status === "approved") {
       return next(new AppError("sick leave request already aprroved", 400));
     }
-    sickness.status = "approve";
+    sickness.status = "approved";
     sickness.approvedAt = Date.now();
     await sickness.save();
 
@@ -113,10 +280,10 @@ exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
     if (!holidays) {
       return next(new AppError("holidat request not found", 400));
     }
-    if (holidays.status === "approve") {
+    if (holidays.status === "approved") {
       return next(new AppError("holiday request already aprroved", 400));
     }
-    holidays.status = "approve";
+    holidays.status = "approved";
     holidays.approvedAt = Date.now();
     await holidays.save();
 

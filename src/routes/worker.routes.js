@@ -18,6 +18,7 @@ const {
 const {
   authMiddeware,
   accessMiddleware,
+  workerAuthMiddleware,
 } = require("../middleware/authMiddleware");
 const uploadSignature = require("../middleware/signature.middleware");
 const { uploadDocuments } = require("../middleware/upload.middleware");
@@ -33,6 +34,7 @@ workerRouter.put(
   "/update-worker",
   authMiddeware,
   accessMiddleware("admin"),
+  uploadDocuments,
   updateWorkerController
 ); // update worker
 workerRouter.get(
@@ -74,8 +76,8 @@ workerRouter.get(
 
 workerRouter.post(
   "/request-holiday",
-  authMiddeware,
-  accessMiddleware("admin"),
+  workerAuthMiddleware,
+  accessMiddleware("worker"),
   requestHoliday
 );
 workerRouter.get(
@@ -91,7 +93,12 @@ workerRouter.get(
   getAllPositions
 );
 
-workerRouter.post("/request-sickness", requestSickness);
+workerRouter.post(
+  "/request-sickness",
+  workerAuthMiddleware,
+  accessMiddleware("worker"),
+  requestSickness
+);
 workerRouter.get("/get-holiday", getHolidays);
 workerRouter.get("/get-sickness", getSickness);
 workerRouter.post("/signature", workerSignature);

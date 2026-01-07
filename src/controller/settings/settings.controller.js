@@ -34,7 +34,7 @@ exports.addWorkerPosition = catchAsync(async (req, res, next) => {
   if (!insert) {
     return next(new AppError("failed to add", 400));
   }
-  const data = { _id: insert._id };
+  const data = [{ _id: insert._id }];
   return sendSuccess(res, "position add successfully", data, 200, true);
 });
 
@@ -88,59 +88,86 @@ exports.deletePosition = catchAsync(async (req, res, next) => {
 
 exports.addOrUpdateHolidaySicknessSettings = catchAsync(
   async (req, res, next) => {
+    const { tenantId } = req;
+
+    /* -------------------- Tenant Validation -------------------- */
+    if (!tenantId) {
+      return next(new AppError("Tenant id missing in request", 400));
+    }
+
+    if (!isValidCustomUUID(tenantId)) {
+      return next(new AppError("Invalid Tenant-id", 400));
+    }
+
     const { holiday, sickness } = req.body;
 
     if (!holiday && !sickness) {
       return next(new AppError("Settings data missing", 400));
     }
 
+    /* -------------------- Holiday Validation -------------------- */
     if (
       holiday?.monthly_limit !== undefined &&
       (typeof holiday.monthly_limit !== "number" || holiday.monthly_limit < 0)
     ) {
       return next(
-        new AppError("Holiday monthly limit cannot be negative", 400)
+        new AppError("Holiday monthly limit must be a positive number", 400)
       );
     }
 
+    if (
+      holiday?.enabled !== undefined &&
+      typeof holiday.enabled !== "boolean"
+    ) {
+      return next(new AppError("Holiday enabled must be boolean", 400));
+    }
+
+    /* -------------------- Sickness Validation -------------------- */
     if (
       sickness?.monthly_limit !== undefined &&
       (typeof sickness.monthly_limit !== "number" || sickness.monthly_limit < 0)
     ) {
       return next(
-        new AppError("Sickness monthly limit cannot be negative", 400)
+        new AppError("Sickness monthly limit must be a positive number", 400)
       );
     }
 
-    const existing = await HolidaySickness.findOne({});
-    let result;
-
-    if (existing) {
-      result = await HolidaySickness.findByIdAndUpdate(
-        existing._id,
-        {
-          $set: {
-            holiday: {
-              enabled: holiday?.enabled ?? existing.holiday.enabled,
-              monthly_limit:
-                holiday?.monthly_limit ?? existing.holiday.monthly_limit,
-            },
-            sickness: {
-              enabled: sickness?.enabled ?? existing.sickness.enabled,
-              monthly_limit:
-                sickness?.monthly_limit ?? existing.sickness.monthly_limit,
-            },
-          },
-        },
-        { new: true }
-      );
-    } else {
-      result = await HolidaySickness.create({
-        holiday: holiday ?? { enabled: false, monthly_limit: 0 },
-        sickness: sickness ?? { enabled: false, monthly_limit: 0 },
-      });
+    if (
+      sickness?.enabled !== undefined &&
+      typeof sickness.enabled !== "boolean"
+    ) {
+      return next(new AppError("Sickness enabled must be boolean", 400));
     }
 
+    /* -------------------- Build Update Object -------------------- */
+    const updatePayload = {};
+
+    if (holiday) {
+      updatePayload["holiday.enabled"] = holiday.enabled ?? false;
+      updatePayload["holiday.monthly_limit"] = holiday.monthly_limit ?? 0;
+    }
+
+    if (sickness) {
+      updatePayload["sickness.enabled"] = sickness.enabled ?? false;
+      updatePayload["sickness.monthly_limit"] = sickness.monthly_limit ?? 0;
+    }
+
+    /* -------------------- Atomic Upsert (NO Race Condition) -------------------- */
+    const result = await HolidaySickness.findOneAndUpdate(
+      { tenantId },
+      { $set: updatePayload },
+      {
+        new: true,
+        upsert: true, // creates if not exists
+        runValidators: true, // schema-level safety
+      }
+    );
+
+    if (!result) {
+      return next(new AppError("Failed to save settings", 500));
+    }
+
+    /* -------------------- Worker Bulk Sync (Tenant Scoped) -------------------- */
     const workerUpdate = {};
 
     if (holiday?.monthly_limit !== undefined) {
@@ -153,13 +180,10 @@ exports.addOrUpdateHolidaySicknessSettings = catchAsync(
     }
 
     if (Object.keys(workerUpdate).length > 0) {
-      await workerModel.updateMany({}, { $set: workerUpdate });
+      await workerModel.updateMany({ tenantId }, { $set: workerUpdate });
     }
 
-    if (!result) {
-      return next(new AppError("Failed to save settings", 400));
-    }
-
+    /* -------------------- Success Response -------------------- */
     return sendSuccess(
       res,
       "Holiday & sickness settings saved successfully",
@@ -171,7 +195,14 @@ exports.addOrUpdateHolidaySicknessSettings = catchAsync(
 );
 
 exports.getHolidaySicknessSettings = catchAsync(async (req, res, next) => {
-  const settings = await HolidaySickness.findOne({});
+  const { tenantId } = req;
+  if (!tenantId) {
+    return next(new AppError("tenant id missing in request", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+  const settings = await HolidaySickness.findOne({ tenantId });
 
   if (!settings) {
     return sendSuccess(res, "No settings found", {}, 200, true);
@@ -181,3 +212,5 @@ exports.getHolidaySicknessSettings = catchAsync(async (req, res, next) => {
 });
 
 // <----------- Holidays and sickness end --------->
+
+//  jindagi mai jiski talash thi
