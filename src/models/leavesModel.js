@@ -36,7 +36,7 @@ const holidaySchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["approve", "reject", "pending"],
+    enum: ["approved", "reject", "pending"],
     default: "pending",
   },
   approvedAt: {
@@ -80,7 +80,7 @@ const sicknessSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["approve", "reject", "pending"],
+    enum: ["approved", "reject", "pending"],
     default: "pending",
   },
   approvedAt: {

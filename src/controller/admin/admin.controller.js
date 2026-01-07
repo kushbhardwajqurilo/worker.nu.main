@@ -185,7 +185,7 @@ exports.getSicknessRequest = catchAsync(async (req, res, next) => {
   const structuredData = result.map((item) => ({
     sickness_id: item._id,
     status: item.status,
-    description: item.reason || null,
+    description: item.description || null,
     requestedDate: item.requestedDate,
     approvedAt: item.approvedAt || null,
 
@@ -228,7 +228,7 @@ exports.getSicknessRequest = catchAsync(async (req, res, next) => {
 
 exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
   const { admin_id, tenantId } = req;
-  if (tenantId) {
+  if (!tenantId) {
     return next(new AppError("tenant-id missing", 400));
   }
   if (!isValidCustomUUID(tenantId)) {
@@ -431,3 +431,5 @@ exports.deleteReminder = catchAsync(async (req, res, next) => {
   }
   return sendSuccess(res, "Reminder Delete Successfully", {}, 201, true);
 });
+
+// delete leave;

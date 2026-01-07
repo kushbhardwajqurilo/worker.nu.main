@@ -25,7 +25,7 @@ adminRouter.get(
   accessMiddleware("admin"),
   getSicknessRequest
 );
-adminRouter.post(
+adminRouter.patch(
   "/approve",
   authMiddeware,
   accessMiddleware("admin"),
