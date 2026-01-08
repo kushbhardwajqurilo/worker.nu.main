@@ -301,6 +301,65 @@ exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
   }
 });
 
+exports.RejectLeaveRequest = catchAsync(async (req, res, next) => {
+  const { admin_id, tenantId } = req;
+  if (!tenantId) {
+    return next(new AppError("tenant-id missing", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("invalid tenant-id", 400));
+  }
+  const { l_id, leave, w_id } = req.query;
+  if (
+    !mongoose.Types.ObjectId.isValid(admin_id) ||
+    !mongoose.Types.ObjectId.isValid(l_id) ||
+    !mongoose.Types.ObjectId.isValid(w_id)
+  ) {
+    return next(new AppError("invalid credentials", 400));
+  }
+  if (!leave) {
+    return next(new AppError("leave type missing", 400));
+  }
+  //   check valid worker
+  const worker = await workerModel.findOne({ tenantId, _id: w_id });
+  if (!worker) {
+    return next(new AppError("Invalid Worker", 400));
+  }
+  if (worker.isActive === false || worker.isDelete) {
+    return next(new AppError("worker not active", 400));
+  }
+
+  //   check  for leave
+  if (leave === "sickness") {
+    const sickness = await sicknessModel.findOne({ tenantId, _id: l_id });
+    if (!sickness) {
+      return next(new AppError("sickness request not found", 400));
+    }
+    if (sickness.status === "reject") {
+      return next(new AppError("sick leave request already rejected", 400));
+    }
+    sickness.status = "reject";
+    sickness.approvedAt = Date.now();
+    await sickness.save();
+
+    return sendSuccess(res, "sick leave request rejected", {}, 201, true);
+  } else if (leave === "holiday") {
+    const holidays = await holidayModel.findOne({ tenantId, _id: l_id });
+    if (!holidays) {
+      return next(new AppError("holidat request not found", 400));
+    }
+    if (holidays.status === "reject") {
+      return next(new AppError("holiday request already reject", 400));
+    }
+    holidays.status = "reject";
+    holidays.approvedAt = Date.now();
+    await holidays.save();
+
+    return sendSuccess(res, "holiday request reject success", {}, 201, true);
+  } else {
+    return next(new AppError("Invalid Request Type", 400));
+  }
+});
 // <-------------- REMINDERS ----------->
 exports.setProjectReminder = catchAsync(async (req, res, next) => {
   const requiredField = ["title", "note", "date", "reminderFor"];
@@ -433,3 +492,5 @@ exports.deleteReminder = catchAsync(async (req, res, next) => {
 });
 
 // delete leave;
+
+exports.delete;
