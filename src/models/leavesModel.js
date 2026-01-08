@@ -36,12 +36,16 @@ const holidaySchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["approved", "reject", "pending"],
+    enum: ["approved", "rejected", "pending"],
     default: "pending",
   },
   approvedAt: {
     type: Date,
     default: null,
+  },
+  isDelete: {
+    type: Boolean,
+    default: false,
   },
 });
 const sicknessSchema = new mongoose.Schema({
@@ -80,12 +84,16 @@ const sicknessSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["approved", "reject", "pending"],
+    enum: ["approved", "rejected", "pending"],
     default: "pending",
   },
   approvedAt: {
     type: Date,
     default: null,
+  },
+  isDelete: {
+    type: Boolean,
+    default: false,
   },
 });
 const holidayModel = mongoose.model("holiday_leaves", holidaySchema);

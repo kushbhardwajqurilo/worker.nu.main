@@ -38,7 +38,10 @@ exports.getHolidayRequest = catchAsync(async (req, res, next) => {
   const skip = (page - 1) * limit;
 
   // ================= TOTAL COUNT =================
-  const totalRecords = await holidayModel.countDocuments({ tenantId });
+  const totalRecords = await holidayModel.countDocuments({
+    tenantId,
+    isDelete: false,
+  });
 
   // ================= FETCH DATA =================
   const result = await holidayModel
@@ -148,7 +151,7 @@ exports.getSicknessRequest = catchAsync(async (req, res, next) => {
 
   // ================= FETCH DATA =================
   const result = await sicknessModel
-    .find({ tenantId })
+    .find({ tenantId, isDelete: false })
     .sort({ requestedDate: -1 }) // latest first
     .skip(skip)
     .limit(limit)
@@ -335,10 +338,10 @@ exports.RejectLeaveRequest = catchAsync(async (req, res, next) => {
     if (!sickness) {
       return next(new AppError("sickness request not found", 400));
     }
-    if (sickness.status === "reject") {
+    if (sickness.status === "rejected") {
       return next(new AppError("sick leave request already rejected", 400));
     }
-    sickness.status = "reject";
+    sickness.status = "rejected";
     sickness.approvedAt = Date.now();
     await sickness.save();
 
@@ -348,10 +351,10 @@ exports.RejectLeaveRequest = catchAsync(async (req, res, next) => {
     if (!holidays) {
       return next(new AppError("holidat request not found", 400));
     }
-    if (holidays.status === "reject") {
+    if (holidays.status === "rejected") {
       return next(new AppError("holiday request already reject", 400));
     }
-    holidays.status = "reject";
+    holidays.status = "rejected";
     holidays.approvedAt = Date.now();
     await holidays.save();
 
@@ -493,4 +496,97 @@ exports.deleteReminder = catchAsync(async (req, res, next) => {
 
 // delete leave;
 
-exports.delete;
+exports.DeleteLeaveRequest = catchAsync(async (req, res, next) => {
+  const { admin_id, tenantId } = req;
+  const { l_id, leave, w_id } = req.query;
+
+  /* ---------- BASIC VALIDATIONS ---------- */
+  if (!tenantId) {
+    return next(new AppError("tenant-id missing", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("invalid tenant-id", 400));
+  }
+
+  if (
+    !mongoose.Types.ObjectId.isValid(admin_id) ||
+    !mongoose.Types.ObjectId.isValid(l_id) ||
+    !mongoose.Types.ObjectId.isValid(w_id)
+  ) {
+    return next(new AppError("invalid credentials", 400));
+  }
+
+  if (!leave || !["sickness", "holiday"].includes(leave)) {
+    return next(new AppError("invalid leave type", 400));
+  }
+
+  /* ---------- CHECK WORKER ---------- */
+  const worker = await workerModel.findOne({
+    tenantId,
+    _id: w_id,
+    isDelete: false,
+    isActive: true,
+  });
+
+  if (!worker) {
+    return next(new AppError("worker not found or inactive", 400));
+  }
+
+  /* ---------- DELETE LEAVE ---------- */
+  let leaveDoc;
+
+  if (leave === "sickness") {
+    leaveDoc = await sicknessModel.findOne({
+      tenantId,
+      _id: l_id,
+      workerId: w_id,
+    });
+
+    if (!leaveDoc) {
+      return next(new AppError("sickness request not found", 404));
+    }
+
+    if (leaveDoc.isDelete === true) {
+      return next(new AppError("sickness request already deleted", 400));
+    }
+
+    leaveDoc.isDelete = true;
+    await leaveDoc.save();
+
+    return sendSuccess(
+      res,
+      "Sickness leave deleted successfully",
+      {},
+      200,
+      true
+    );
+  }
+
+  if (leave === "holiday") {
+    leaveDoc = await holidayModel.findOne({
+      tenantId,
+      _id: l_id,
+      workerId: w_id,
+    });
+
+    if (!leaveDoc) {
+      return next(new AppError("holiday request not found", 404));
+    }
+
+    if (leaveDoc.isDelete === true) {
+      return next(new AppError("holiday request already deleted", 400));
+    }
+
+    leaveDoc.isDelete = true;
+    await leaveDoc.save();
+
+    return sendSuccess(
+      res,
+      "Holiday leave deleted successfully",
+      {},
+      200,
+      true
+    );
+  }
+});

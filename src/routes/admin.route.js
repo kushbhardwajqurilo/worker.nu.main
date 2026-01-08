@@ -6,6 +6,7 @@ const {
   editReminder,
   deleteReminder,
   RejectLeaveRequest,
+  DeleteLeaveRequest,
 } = require("../controller/admin/admin.controller");
 const {
   authMiddeware,
@@ -57,5 +58,11 @@ adminRouter.patch(
   authMiddeware,
   accessMiddleware("admin"),
   RejectLeaveRequest
+);
+adminRouter.delete(
+  "/delete-leave",
+  authMiddeware,
+  accessMiddleware("admin"),
+  DeleteLeaveRequest
 );
 module.exports = adminRouter;
