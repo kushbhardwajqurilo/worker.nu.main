@@ -45,7 +45,7 @@ exports.getHolidayRequest = catchAsync(async (req, res, next) => {
 
   // ================= FETCH DATA =================
   const result = await holidayModel
-    .find({ tenantId })
+    .find({ tenantId, isDelete: false })
     .sort({ requestedDate: -1 }) // latest first (recommended)
     .skip(skip)
     .limit(limit)
@@ -147,7 +147,10 @@ exports.getSicknessRequest = catchAsync(async (req, res, next) => {
   const skip = (page - 1) * limit;
 
   // ================= TOTAL COUNT =================
-  const totalRecords = await sicknessModel.countDocuments({ tenantId });
+  const totalRecords = await sicknessModel.countDocuments({
+    tenantId,
+    isDelete: false,
+  });
 
   // ================= FETCH DATA =================
   const result = await sicknessModel
@@ -589,4 +592,141 @@ exports.DeleteLeaveRequest = catchAsync(async (req, res, next) => {
       true
     );
   }
+});
+
+exports.getApproveLeaves = catchAsync(async (req, res, next) => {
+  const { admin_id, tenantId } = req;
+  const { type } = req.query;
+
+  /* ---------- BASIC VALIDATION ---------- */
+  if (!tenantId) {
+    return next(new AppError("tenant-id missing", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("invalid tenant-id", 400));
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(admin_id)) {
+    return next(new AppError("invalid admin credentials", 400));
+  }
+
+  if (!type || !["holiday", "sickness"].includes(type)) {
+    return next(new AppError("invalid leave type", 400));
+  }
+
+  const admin = await adminModel.findOne({ tenantId, _id: admin_id });
+  if (!admin) {
+    return next(new AppError("invalid admin", 400));
+  }
+
+  /* ---------- PAGINATION ---------- */
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(parseInt(req.query.limit, 10) || 5, 100);
+  const skip = (page - 1) * limit;
+
+  /* ---------- CONFIG BASED ON TYPE ---------- */
+  const config = {
+    holiday: {
+      model: holidayModel,
+      idKey: "holiday_id",
+      message: "holiday requests found",
+      remainingKey: "remaining_holidays",
+      descriptionKey: "reason",
+    },
+    sickness: {
+      model: sicknessModel,
+      idKey: "sickness_id",
+      message: "sickness requests found",
+      remainingKey: "remaining_sickness",
+      descriptionKey: "description",
+    },
+  }[type];
+
+  /* ---------- QUERY (APPROVED ONLY) ---------- */
+  const query = {
+    tenantId,
+    isDelete: false,
+    status: "approved",
+  };
+
+  /* ---------- TOTAL COUNT ---------- */
+  const totalRecords = await config.model.countDocuments(query);
+
+  /* ---------- FETCH DATA ---------- */
+  const result = await config.model
+    .find(query)
+    .sort({ requestedDate: -1 })
+    .skip(skip)
+    .limit(limit)
+    .populate({
+      path: "workerId",
+      select:
+        "-worker_personal_details.phone -project -language -worker_economical_data -isDelete -isActive -dashboardUrl -urlVisibleToAdmin -signature -isSign -urlAdminExpireAt -personal_information.bank_details -personal_information.address_details -personal_information.close_contact -personal_information.clothing_sizes -personal_information.documents.drivers_license -personal_information.documents.passport -personal_information.documents.national_id_card -personal_information.documents.worker_work_id -personal_information.documents.other_files -createdAt -updatedAt -__v -personal_information.email -personal_information.date_of_birth",
+      populate: {
+        path: "worker_position",
+        model: "worker_position",
+        select: "_id position",
+      },
+    })
+    .lean();
+
+  /* ---------- EMPTY SAFE RESPONSE ---------- */
+  if (!result.length) {
+    return sendSuccess(
+      res,
+      config.message,
+      {
+        data: [],
+        page,
+        limit,
+        total: totalRecords,
+        totalPages: Math.ceil(totalRecords / limit),
+      },
+      200,
+      true
+    );
+  }
+
+  /* ---------- STRUCTURE DATA ---------- */
+  const structuredData = result.map((item) => ({
+    [config.idKey]: item._id,
+    status: item.status,
+    description: item[config.descriptionKey] || null,
+    requestedDate: item.requestedDate,
+    approvedAt: item.approvedAt || null,
+
+    duration: {
+      startDate: item.duration?.startDate || null,
+      endDate: item.duration?.endDate || null,
+      totalDays: item.duration?.totalDays || 0,
+      remaining_days: item.workerId.worker_holiday?.[config.remainingKey] ?? 0,
+    },
+
+    worker: {
+      worker_id: item.workerId._id,
+      worker_code: item.workerId.id,
+      name: `${item.workerId.worker_personal_details?.firstName || ""} ${
+        item.workerId.worker_personal_details?.lastName || ""
+      }`.trim(),
+      position: item.workerId.worker_position?.map((p) => p.position) || [],
+      profile_picture:
+        item.workerId.personal_information?.documents?.profile_picture || null,
+    },
+  }));
+
+  /* ---------- RESPONSE ---------- */
+  return sendSuccess(
+    res,
+    config.message,
+    {
+      data: structuredData,
+      page,
+      limit,
+      total: totalRecords,
+      totalPages: Math.ceil(totalRecords / limit),
+    },
+    200,
+    true
+  );
 });
