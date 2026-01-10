@@ -25,7 +25,6 @@ const generateAcessToken = (data) => {
 };
 
 const generateRefreshToken = async (user, expire) => {
-  console.log("expire", expire);
   const refreshToken = jwt.sign(
     { id: user.admin_id, role: user.role, tenant: user.tenant },
     process.env.SECRET_KEY,

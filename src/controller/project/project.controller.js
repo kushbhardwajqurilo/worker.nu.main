@@ -6,38 +6,115 @@ const { catchAsync } = require("../../utils/errorHandler");
 const { isValidCustomUUID } = require("custom-uuid-generator");
 const { default: mongoose } = require("mongoose");
 const { workerModel } = require("../../models/workerModel");
+const clientModel = require("../../models/clientModel");
+const hoursModel = require("../../models/hoursModel");
 
 exports.addProjectController = catchAsync(async (req, res, next) => {
+  // console.log(req.body);
   const { tenantId } = req;
-  if (!tenantId) {
-    return next(new AppError("Tenant Missing The Request", 400));
-  }
-  if (!isValidCustomUUID(tenantId)) {
-    return next(new AppError("Invalid Tenant", 400));
-  }
-  if (!req.body || Object.keys(req.body).length === 0) {
-    return next(new AppError("Project details missing", 400));
+
+  if (!tenantId || !isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid tenant", 400));
   }
 
-  const {
-    project_details,
-    daily_work_hour,
-    project_workers,
-    project_details_for_workers,
-    client_details,
-    project_time_economical_details,
-  } = req.body;
+  // ================= SAFE JSON PARSER =================
+  const parseJSON = (value, field) => {
+    try {
+      return typeof value === "string" ? JSON.parse(value) : value;
+    } catch {
+      throw new AppError(`Invalid JSON in ${field}`, 400);
+    }
+  };
 
-  if (
-    !project_details ||
-    !daily_work_hour ||
-    !project_workers ||
-    !project_details_for_workers ||
-    !client_details ||
-    !project_time_economical_details
-  ) {
-    return next(new AppError("Some Project details missing", 400));
-  }
+  // ================= PARSE BODY =================
+  const project_details = parseJSON(
+    req.body.project_details,
+    "project_details"
+  );
+  const daily_work_hour_raw = parseJSON(
+    req.body.daily_work_hour,
+    "daily_work_hour"
+  );
+  const project_workers = parseJSON(
+    req.body.project_workers,
+    "project_workers"
+  );
+  const pdw_raw = parseJSON(
+    req.body.project_details_for_workers,
+    "project_details_for_workers"
+  );
+  const client_details = parseJSON(req.body.client_details, "client_details");
+  const project_time_economical_details = parseJSON(
+    req.body.project_time_economical_details,
+    "project_time_economical_details"
+  );
+
+  // ================= DAILY WORK HOUR =================
+  const daily_work_hour = {
+    shift_start_time: {
+      hours: Number(daily_work_hour_raw.shift_start_time.hours),
+      minutes: Number(daily_work_hour_raw.shift_start_time.minutes),
+    },
+    shift_end_time: {
+      hours: Number(daily_work_hour_raw.shift_end_time.hours),
+      minutes: Number(daily_work_hour_raw.shift_end_time.minutes),
+    },
+    break_time: Number(daily_work_hour_raw.break_time) || null,
+  };
+
+  // ================= FILES & FOLDERS (upload.any()) =================
+  /**
+   * req.files = [
+   *  { fieldname: "files.0", path: "url1" },
+   *  { fieldname: "files.1", path: "url2" },
+   *  { fieldname: "folders.0.files", path: "url3" }
+   * ]
+   */
+
+  const files = [];
+  const foldersMap = {};
+
+  (req.files || []).forEach((file) => {
+    // ---- NORMAL FILES ----
+    if (file.fieldname.startsWith("files.")) {
+      files.push({ file_url: file.path });
+    }
+
+    // ---- FOLDER FILES ----
+    if (
+      file.fieldname.startsWith("folders.") &&
+      file.fieldname.endsWith(".files")
+    ) {
+      const folderIndex = file.fieldname.split(".")[1];
+
+      if (!foldersMap[folderIndex]) {
+        foldersMap[folderIndex] = {
+          folder_name: req.body[`folders.${folderIndex}.folderName`] || null,
+          folder_files: [],
+        };
+      }
+
+      foldersMap[folderIndex].folder_files.push({
+        file_url: file.path,
+      });
+    }
+  });
+
+  const folders = Object.values(foldersMap);
+
+  // ================= PROJECT DETAILS FOR WORKERS =================
+  const project_details_for_workers = {
+    description: pdw_raw?.description || null,
+    files,
+    folders,
+    contact_information: {
+      position: pdw_raw?.contact_information?.position || null,
+      phone_code: pdw_raw?.contact_information?.phone_code || "Lithuania(+370)",
+      phone_number: Number(pdw_raw?.contact_information?.phone_number) || null,
+    },
+  };
+
+  // ================= FINAL PAYLOAD =================
   const payload = {
     tenantId,
     project_details,
@@ -47,11 +124,20 @@ exports.addProjectController = catchAsync(async (req, res, next) => {
     client_details,
     project_time_economical_details,
   };
+
+  // ================= CREATE PROJECT =================
   const project = await projectMode.create(payload);
-  if (!project) {
-    return next(new AppError("failed to add project", 400));
-  }
-  return sendSuccess(res, "Project add successfully", {}, 200, true);
+
+  return sendSuccess(
+    res,
+    "Project created successfully",
+    {
+      projectId: project.projectId,
+      _id: project._id,
+    },
+    201,
+    true
+  );
 });
 
 // <----- add project end --------->
@@ -69,19 +155,88 @@ exports.getAllProjectsController = catchAsync(async (req, res, next) => {
     return next(new AppError("Invalid Tenant", 400));
   }
 
-  const projects = await projectMode
-    .find({ tenantId })
-    .populate({
-      path: "project_workers.workers",
-      select: "personal_information.documents.profile_picture",
-    })
-    .lean();
+  // ================= PAGINATION =================
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 5;
+  const skip = (page - 1) * limit;
 
-  if (!projects || projects.length === 0) {
-    return next(new AppError("No projects found", 404));
+  // ================= QUERY =================
+  const query = { tenantId, isDelete: false };
+
+  const totalCount = await projectMode.countDocuments(query);
+
+  if (totalCount === 0) {
+    return sendSuccess(res, "no data found", [], 200, true);
   }
 
-  projects.forEach((project) => {
+  const totalPage = Math.ceil(totalCount / limit);
+
+  if (page > totalPage) {
+    return sendSuccess(
+      res,
+      "No page found",
+      { total: totalCount, page, limit, totalPage, projects: [] },
+      200,
+      true
+    );
+  }
+
+  // ================= FETCH PROJECTS =================
+  const projects = await projectMode
+    .find(query)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .populate([
+      {
+        path: "project_workers.workers",
+        select:
+          "personal_information.documents.profile_picture worker_personal_details",
+      },
+      {
+        path: "client_details.client",
+        select: "_id client_details.client_name",
+      },
+      {
+        path: "project_time_economical_details.hourly_rate.hourly_by_position.position",
+        select: "position",
+      },
+    ])
+    .lean();
+
+  // ================= PROJECT IDS =================
+  const projectedIds = projects.map((p) => p._id);
+
+  // ================= TOTAL HOURS AGGREGATION =================
+  const projectHours = await hoursModel.aggregate([
+    {
+      $match: {
+        tenantId,
+        "project.projectId": { $in: projectedIds },
+      },
+    },
+    {
+      $group: {
+        _id: "$project.projectId",
+        totalHours: { $sum: "$total_hours" },
+      },
+    },
+    {
+      $project: {
+        totalHours: { $round: ["$totalHours", 2] },
+      },
+    },
+  ]);
+
+  // ================= MAP (projectId => totalHours) =================
+  const hoursMap = {};
+  projectHours.forEach((item) => {
+    hoursMap[item._id.toString()] = item.totalHours;
+  });
+
+  // ================= FORMAT RESPONSE =================
+  const formattedProjects = projects.map((project, index) => {
+    // workers formatting
     if (
       project.project_workers &&
       Array.isArray(project.project_workers.workers)
@@ -89,14 +244,48 @@ exports.getAllProjectsController = catchAsync(async (req, res, next) => {
       project.project_workers.workers = project.project_workers.workers.map(
         (worker) => ({
           _id: worker._id,
+          worker_name: `${worker.worker_personal_details.firstName} ${worker.worker_personal_details.lastName}`,
           profile_picture:
             worker.personal_information?.documents?.profile_picture ?? null,
         })
       );
     }
+
+    // client formatting
+    let formattedClientDetails = null;
+    if (project.client_details) {
+      formattedClientDetails = {
+        _id: project.client_details.client?._id ?? null,
+        client_name:
+          project.client_details.client?.client_details?.client_name ?? null,
+        company_no: project.client_details.company_no ?? null,
+        email: project.client_details.email ?? null,
+        phone: project.client_details.phone ?? null,
+      };
+    }
+
+    return {
+      sr_no: (page - 1) * limit + index + 1,
+      ...project,
+      total_hours: hoursMap[project._id.toString()] ?? 0, // ✅ ONLY NUMBER
+      client_details: formattedClientDetails,
+    };
   });
 
-  return sendSuccess(res, "Projects fetched successfully", projects, 200, true);
+  // ================= RESPONSE =================
+  return sendSuccess(
+    res,
+    "Projects fetched successfully",
+    {
+      total: totalCount,
+      page,
+      limit,
+      totalPage,
+      projects: formattedProjects,
+    },
+    200,
+    true
+  );
 });
 
 // <----- get all projects end --------->
@@ -126,25 +315,159 @@ exports.getSingleProjectController = catchAsync(async (req, res, next) => {
 // <----- update project start --------->
 exports.updateProjectController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
+
   if (!tenantId) {
     return next(new AppError("Tenant Missing The Request", 400));
   }
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant", 400));
   }
-  const { project_id } = req.query;
 
+  const { project_id } = req.query;
   if (!project_id || project_id.toString().trim().length === 0) {
     return next(new AppError("Project id missing", 400));
   }
 
-  if (!req.body || Object.keys(req.body).length === 0) {
+  if (!req.body && !req.files?.length) {
     return next(new AppError("No update data provided", 400));
   }
 
+  // ================= SAFE JSON PARSER =================
+  const parseJSON = (value, field) => {
+    try {
+      if (!value) return undefined;
+      return typeof value === "string" ? JSON.parse(value) : value;
+    } catch {
+      throw new AppError(`Invalid JSON in ${field}`, 400);
+    }
+  };
+
+  // ================= UPDATE OBJECTS =================
+  const setUpdate = {};
+  const pushUpdate = {};
+
+  // ---------- NORMAL FIELDS ----------
+  if (req.body.project_details) {
+    setUpdate.project_details = parseJSON(
+      req.body.project_details,
+      "project_details"
+    );
+  }
+
+  if (req.body.daily_work_hour) {
+    const dwh = parseJSON(req.body.daily_work_hour, "daily_work_hour");
+    setUpdate.daily_work_hour = {
+      shift_start_time: {
+        hours: Number(dwh.shift_start_time.hours),
+        minutes: Number(dwh.shift_start_time.minutes),
+      },
+      shift_end_time: {
+        hours: Number(dwh.shift_end_time.hours),
+        minutes: Number(dwh.shift_end_time.minutes),
+      },
+      break_time: Number(dwh.break_time) || null,
+    };
+  }
+
+  if (req.body.project_workers) {
+    setUpdate.project_workers = parseJSON(
+      req.body.project_workers,
+      "project_workers"
+    );
+  }
+
+  if (req.body.client_details) {
+    setUpdate.client_details = parseJSON(
+      req.body.client_details,
+      "client_details"
+    );
+  }
+
+  if (req.body.project_time_economical_details) {
+    setUpdate.project_time_economical_details = parseJSON(
+      req.body.project_time_economical_details,
+      "project_time_economical_details"
+    );
+  }
+
+  // ================= FILES & FOLDERS (upload.any()) =================
+  /**
+   * req.files = [
+   *  { fieldname: "files.0", path: "url1" },
+   *  { fieldname: "folders.0.files", path: "url2" }
+   * ]
+   */
+
+  const filesToPush = [];
+  const foldersMap = {};
+
+  (req.files || []).forEach((file) => {
+    // ---- NORMAL FILES ----
+    if (file.fieldname.startsWith("files.")) {
+      filesToPush.push({ file_url: file.path });
+    }
+
+    // ---- FOLDER FILES ----
+    if (
+      file.fieldname.startsWith("folders.") &&
+      file.fieldname.endsWith(".files")
+    ) {
+      const folderIndex = file.fieldname.split(".")[1];
+
+      if (!foldersMap[folderIndex]) {
+        foldersMap[folderIndex] = {
+          folder_name: req.body[`folders.${folderIndex}.folderName`] || null,
+          folder_files: [],
+        };
+      }
+
+      foldersMap[folderIndex].folder_files.push({
+        file_url: file.path,
+      });
+    }
+  });
+
+  // ---------- PUSH OPERATIONS ----------
+  if (filesToPush.length) {
+    pushUpdate["project_details_for_workers.files"] = {
+      $each: filesToPush,
+    };
+  }
+
+  if (Object.keys(foldersMap).length) {
+    pushUpdate["project_details_for_workers.folders"] = {
+      $each: Object.values(foldersMap),
+    };
+  }
+
+  // ---------- DESCRIPTION / CONTACT UPDATE ----------
+  if (req.body.project_details_for_workers) {
+    const pdw = parseJSON(
+      req.body.project_details_for_workers,
+      "project_details_for_workers"
+    );
+
+    if (pdw?.description) {
+      setUpdate["project_details_for_workers.description"] = pdw.description;
+    }
+
+    if (pdw?.contact_information) {
+      setUpdate["project_details_for_workers.contact_information"] = {
+        position: pdw.contact_information.position || null,
+        phone_code: pdw.contact_information.phone_code || "Lithuania(+370)",
+        phone_number: Number(pdw.contact_information.phone_number) || null,
+      };
+    }
+  }
+
+  // ================= FINAL UPDATE =================
+  const updateQuery = {};
+  if (Object.keys(setUpdate).length) updateQuery.$set = setUpdate;
+  if (Object.keys(pushUpdate).length) updateQuery.$push = pushUpdate;
+
   const project = await projectMode.findOneAndUpdate(
     { tenantId, _id: project_id },
-    { $set: req.body },
+    updateQuery,
     { new: true, runValidators: true }
   );
 
@@ -166,19 +489,19 @@ exports.deleteProjectController = catchAsync(async (req, res, next) => {
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant", 400));
   }
-  const { project_id } = req.query;
-  if (!project_id || project_id.toString().trim().length === 0) {
+  const { p_id } = req.query;
+  if (!p_id || p_id.toString().trim().length === 0) {
     return next(new AppError("Project id missing", 400));
   }
   const project = await projectMode.findByIdAndUpdate(
-    project_id,
-    { is_active: false },
+    p_id,
+    { isDelete: true },
     { new: true }
   );
   if (!project) {
     return next(new AppError("Project not found", 400));
   }
-  return sendSuccess(res, "Project deleted successfully", project, 200, true);
+  return sendSuccess(res, "Project deleted successfully", {}, 200, true);
 });
 
 // <----- delete project end ---------->
@@ -208,7 +531,7 @@ exports.addWorkerInProject = catchAsync(async (req, res, next) => {
   const project = await projectMode.findOne({
     tenantId,
     _id: p_id,
-    is_active: true,
+    is_complete: false,
   });
   if (!project) {
     return next(new AppError("project not found try again later", 400));
@@ -253,7 +576,6 @@ exports.workerList = catchAsync(async (req, res, next) => {
   const workers = await workerModel.find({
     tenantId,
     isDelete: false,
-    isActive: true,
   });
 
   if (!workers || workers.length === 0) {
@@ -270,4 +592,102 @@ exports.workerList = catchAsync(async (req, res, next) => {
   });
 
   return sendSuccess(res, "success", workersList, 200, true);
+});
+
+exports.clientList = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+
+  if (!tenantId) {
+    return next(new AppError("tenant-id missing in headers", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+  const clients = await clientModel
+    .find({ isDelete: { $ne: true } })
+    .select("_id client_details")
+    .lean();
+
+  if (!clients) {
+    return sendSuccess(res, "no client foud", [], 200, true);
+  }
+  const result = clients.map((val, pos) => {
+    return {
+      _id: val._id,
+      client_name: val.client_details.client_name,
+    };
+  });
+
+  return sendSuccess(res, "client fetch", result, 200, true);
+});
+
+exports.getProjectPictures = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  const { p_id } = req.query;
+  if (!tenantId) return next(new AppError("tenant-id missing", 400));
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-Id", 400));
+  }
+
+  const worker_hours = await hoursModel
+    .find({
+      tenantId,
+      "project.projectId": p_id,
+      is_active: { $ne: false },
+    })
+    .populate([
+      {
+        path: "workerId",
+        select: "worker_personal_details",
+      },
+    ])
+    .select("project workerId total_hours comments image createdAt")
+    .lean();
+  if (!worker_hours) {
+    return sendSuccess(res, "project pictures not found", {}, 200, true);
+  }
+
+  const filterDataa = worker_hours.map(
+    ({ workerId, createdAt, project, ...rest }) => ({
+      ...rest,
+      date: project.project_date,
+      worker: workerId
+        ? {
+            _id: workerId._id,
+            worker_name: `${workerId.worker_personal_details.firstName} ${workerId.worker_personal_details.lastName}`,
+          }
+        : null,
+      date_of_submission: createdAt,
+    })
+  );
+  return sendSuccess(res, "project picture found", filterDataa, 200, true);
+});
+
+exports.markAsComplete = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  const { p_id } = req.query;
+  if (!tenantId) {
+    return next(new AppError("tenant id missing", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid tennat-id", 400));
+  }
+  if (!p_id) {
+    return next(new AppError("prodcut id missing", 400));
+  }
+  if (!mongoose.Types.ObjectId.isValid(p_id)) {
+    {
+      return next(new AppError("Invalid Project Id"));
+    }
+  }
+  const project = await projectMode.findOne({ tenantId, _id: p_id });
+  if (!project) {
+    return next(new AppError("project not found", 400));
+  }
+
+  project.is_complete = true;
+  await project.save();
+
+  return sendSuccess(res, "Mark As Complete Success", {}, 201, true);
 });

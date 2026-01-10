@@ -372,10 +372,8 @@ exports.getSingleWorkerController = catchAsync(async (req, res, next) => {
 
   // ================= HELPERS =================
   const formatDate = (date) => new Date(date).toLocaleDateString("en-GB");
-
   const daysAgo = (date) =>
     Math.floor((Date.now() - new Date(date)) / (1000 * 60 * 60 * 24));
-
   const today = new Date();
 
   // ================= HOLIDAY =================
@@ -437,11 +435,6 @@ exports.getSingleWorkerController = catchAsync(async (req, res, next) => {
     ? hoursTime.total_hours / HOURS_PER_DAY
     : 0;
 
-  const sickVsWorkPercent =
-    totalWorkingDays > 0
-      ? Number(((totalSickDays / totalWorkingDays) * 100).toFixed(2))
-      : 0;
-
   const sickness = {
     last_sickness_day: lastSickness
       ? `${formatDate(lastSickness.duration.endDate)} (${daysAgo(
@@ -449,7 +442,10 @@ exports.getSingleWorkerController = catchAsync(async (req, res, next) => {
         )} days ago)`
       : null,
     total_sick_days: totalSickDays,
-    percentage: `${sickVsWorkPercent}%`,
+    percentage:
+      totalWorkingDays > 0
+        ? `${((totalSickDays / totalWorkingDays) * 100).toFixed(2)}%`
+        : "0%",
   };
 
   // ================= ACTIVE PROJECTS =================
@@ -491,7 +487,7 @@ exports.getSingleWorkerController = catchAsync(async (req, res, next) => {
       {
         $project: {
           _id: "$project._id",
-          project_name: "$project.project_name",
+          project_name: "$project.project_details.project_name",
         },
       },
     ]),
@@ -521,7 +517,7 @@ exports.getSingleWorkerController = catchAsync(async (req, res, next) => {
       {
         $project: {
           _id: "$project._id",
-          project_name: "$project.project_name",
+          project_name: "$project.project_details.project_name",
         },
       },
     ]),
@@ -532,32 +528,34 @@ exports.getSingleWorkerController = catchAsync(async (req, res, next) => {
     user_created: formatDateUTC(worker.createdAt),
     worked_time: hoursTime?.total_hours ? `${hoursTime.total_hours}h` : "0h",
     last_hour_register: formatDateUTC(hoursTime?.createdAt) || null,
-    hourly_salary:
-      `$${worker.worker_economical_data?.worker_hourly_salary}` ?? 0,
+    hourly_salary: `$${
+      worker.worker_economical_data?.worker_hourly_salary || 0
+    }`,
   };
 
   // ================= AGE =================
-  const age = calculateAge(worker.personal_information.date_of_birth);
-  worker.personal_information.age = age;
+  worker.personal_information.age = calculateAge(
+    worker.personal_information.date_of_birth
+  );
 
   delete worker.worker_holiday;
 
   // ================= RESPONSE =================
-  const responseData = {
-    ...worker,
-    professional_details: professionalDetails,
-    holiday,
-    sickness,
-    projects: {
-      this_month: activeProjectsThisMonth,
-      last_month: activeProjectsLastMonth,
-    },
-  };
-
   return sendSuccess(
     res,
     "Worker fetched successfully",
-    [responseData],
+    [
+      {
+        ...worker,
+        professional_details: professionalDetails,
+        holiday,
+        sickness,
+        projects: {
+          this_month: activeProjectsThisMonth,
+          last_month: activeProjectsLastMonth,
+        },
+      },
+    ],
     200,
     true
   );

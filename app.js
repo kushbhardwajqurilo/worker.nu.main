@@ -28,6 +28,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "https://yourdomain.com",
   "https://admin.yourdomain.com",
+  "https://ql3cm80q-3000.inc1.devtunnels.ms",
 ];
 
 app.use(

@@ -96,48 +96,48 @@ const projectSchema = new mongoose.Schema(
     client_details: {
       client: {
         type: mongoose.Schema.Types.ObjectId,
-        required: [true, "Client missing"],
+        default: null,
+        ref: "client",
       },
       company_no: {
         type: String,
-        required: [true, "company No. missing"],
+        default: null,
       },
       email: {
         type: String,
-        required: [true, "email missing inside client details"],
+        default: null,
       },
       phone: {
         type: Number,
-        required: [true, "phone missing inside client details"],
+        default: null,
       },
     },
 
     // project time and economicaldetails
     project_time_economical_details: {
       // hourly payment
-      hourly_payment: {
-        hourly_payment_rate: {
-          type: Number,
-          default: null,
-        },
-        payment_by_position: [
+      hourly_rate: {
+        hourly_payment_rate: { type: String, default: null },
+        hourly_by_position: [
           {
-            position: { type: String, default: null },
-            rate: { type: Number, default: null },
+            position: {
+              type: mongoose.Schema.Types.ObjectId,
+              ref: "worker_position",
+              default: null,
+            },
+            hourly_pay: { type: Number, default: null },
           },
         ],
-        total_numbers_hours: {
-          type: Number,
-          defaut: null,
-        },
+        total_hours: { type: Number, default: null },
       },
 
       // fixed payement
       fixed_payment: {
-        fixed_payment_rate: { type: Number, default: null },
-        total_numbers_hours: { type: Number, default: null },
+        type: Number,
+        default: null,
       },
     },
+    isDelete: { type: Boolean, default: false },
     is_active: { type: Boolean, default: true },
     is_complete: { type: Boolean, default: false },
   },

@@ -4,11 +4,16 @@ const {
   getSingleProjectController,
   updateProjectController,
   workerList,
+  clientList,
+  getProjectPictures,
+  deleteProjectController,
+  markAsComplete,
 } = require("../controller/project/project.controller");
 const {
   authMiddeware,
   accessMiddleware,
 } = require("../middleware/authMiddleware");
+const { uploadDocuments } = require("../middleware/upload.middleware");
 
 const projectRouter = require("express").Router();
 
@@ -16,6 +21,7 @@ projectRouter.post(
   "/add-project",
   authMiddeware,
   accessMiddleware("admin"),
+  uploadDocuments,
   addProjectController
 ); // add project route
 
@@ -39,5 +45,34 @@ projectRouter.get(
   accessMiddleware("admin"),
   workerList
 );
-projectRouter.patch("/update-project", updateProjectController); // update project route
+projectRouter.get(
+  "/client-list",
+  authMiddeware,
+  accessMiddleware("admin"),
+  clientList
+);
+projectRouter.get(
+  "/project-picture",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getProjectPictures
+);
+projectRouter.patch(
+  "/update-project",
+  authMiddeware,
+  accessMiddleware("admin"),
+  updateProjectController
+); // update project route
+projectRouter.delete(
+  "/delete-project",
+  authMiddeware,
+  accessMiddleware("admin"),
+  deleteProjectController
+);
+projectRouter.patch(
+  "/mark-complete",
+  authMiddeware,
+  accessMiddleware("admin"),
+  markAsComplete
+);
 module.exports = projectRouter;

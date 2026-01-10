@@ -169,7 +169,7 @@ exports.getSicknessRequest = catchAsync(async (req, res, next) => {
       },
     })
     .lean();
-
+  console.log("holidat sicness", result);
   // ================= EMPTY SAFE RESPONSE =================
   if (!result || result.length === 0) {
     return sendSuccess(
