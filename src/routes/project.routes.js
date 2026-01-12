@@ -8,6 +8,8 @@ const {
   getProjectPictures,
   deleteProjectController,
   markAsComplete,
+  addWorkerInProject,
+  getProjectEconomy,
 } = require("../controller/project/project.controller");
 const {
   authMiddeware,
@@ -74,5 +76,17 @@ projectRouter.patch(
   authMiddeware,
   accessMiddleware("admin"),
   markAsComplete
+);
+projectRouter.put(
+  "/add-update-worker",
+  authMiddeware,
+  accessMiddleware("admin"),
+  addWorkerInProject
+);
+projectRouter.get(
+  "/project-economy",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getProjectEconomy
 );
 module.exports = projectRouter;

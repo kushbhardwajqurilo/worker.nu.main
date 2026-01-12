@@ -509,54 +509,62 @@ exports.deleteProjectController = catchAsync(async (req, res, next) => {
 // add existing worker in project
 exports.addWorkerInProject = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
-  const { w_id, p_id } = req.query;
+  const { w_id, p_id } = req.body;
+
+  // tenant validation
   if (!tenantId || tenantId.length === 0) {
-    return next(new AppError("tenant-id missig in the headers", 400));
+    return next(new AppError("tenant-id missing in the headers", 400));
   }
+
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant-id", 400));
   }
-  if (!w_id || w_id.length === 0) {
+
+  // worker validation
+  if (!Array.isArray(w_id) || w_id.length === 0) {
     return next(new AppError("worker missing", 400));
   }
+
+  for (let id of w_id) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return next(new AppError("Invalid worker id", 400));
+    }
+  }
+
+  // project validation
   if (!p_id || p_id.length === 0) {
     return next(new AppError("project missing", 400));
   }
-  if (!mongoose.Types.ObjectId.isValid(w_id)) {
-    return next(new AppError("Ivalid worker id", 400));
-  }
+
   if (!mongoose.Types.ObjectId.isValid(p_id)) {
-    return next(new AppError("Ivalid project id", 400));
+    return next(new AppError("Invalid project id", 400));
   }
+
+  // project check
   const project = await projectMode.findOne({
     tenantId,
     _id: p_id,
     is_complete: false,
   });
+
   if (!project) {
     return next(new AppError("project not found try again later", 400));
   }
-  // check already assigned or not
-  const assingedWorker = project.project_workers.workers.some(
-    (id) => is.toString() === w_id
-  );
-  if (assingedWorker) {
-    return next(new AppError("Worker already assigned to project", 400));
-  }
 
+  // ✅ DIRECT REPLACE workers array
   await projectMode.updateOne(
     {
       tenantId,
       _id: p_id,
     },
     {
-      $addToSet: {
+      $set: {
         "project_workers.workers": w_id,
       },
     }
   );
 
-  return sendSuccess(res, "worker added", {}, 201, true);
+  return sendSuccess(res, "worker updated successfully", {}, 200, true);
 });
 
 // worker list for project
@@ -690,4 +698,54 @@ exports.markAsComplete = catchAsync(async (req, res, next) => {
   await project.save();
 
   return sendSuccess(res, "Mark As Complete Success", {}, 201, true);
+});
+
+exports.getProjectEconomy = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  const { p_id } = req.query;
+  if (!tenantId) {
+    return next(new AppError("failed to fetch", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("invalid tenant-id", 400));
+  }
+
+  if (!p_id) {
+    return next(new AppError("project missing id", 400));
+  }
+  if (!mongoose.Types.ObjectId.isValid(p_id)) {
+    return next(new AppError("Ivalid project id", 400));
+  }
+  const query = {
+    tenantId,
+    isDelete: false,
+  };
+  const [project_economy, hours] = await Promise.all([
+    projectMode
+      .findOne(query)
+      .populate({
+        path: "client_details.client",
+        select: "client_details.client_name",
+      })
+      .lean(),
+    hoursModel.find({ tenantId, "project.projectId": p_id }).lean(),
+  ]);
+
+  const total_hours = hours.reduce((sum, item) => sum + item.total_hours, 0);
+  const formatedData = {
+    project: {
+      projectName: project_economy.project_details.project_name,
+      projectLocation: project_economy.project_details.project_location_address,
+      clientName:
+        project_economy.client_details.client.client_details.client_name,
+      status: true,
+    },
+    client_and_hours: {
+      total_hours,
+      notApproved: null,
+      Approved: null,
+    },
+  };
+
+  return sendSuccess(res, "data fetch", formatedData, 200, true);
 });

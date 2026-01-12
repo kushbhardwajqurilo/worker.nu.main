@@ -18,7 +18,7 @@ const companyFields = {
     type: String,
     required: [true, "Notification Emai Required"],
   },
-  language: { type: String, enum: ["English", "Lithuanian"] },
+  language: { type: String, enum: ["english", "lithuanian"] },
 };
 
 const companySchema = new mongoose.Schema(companyFields);
@@ -26,11 +26,6 @@ const companySchema = new mongoose.Schema(companyFields);
 // company alias shcema
 const companyAliasSchema = new mongoose.Schema({
   tenantId: { type: String, required: [true, "tenant-id required"] },
-  company_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "company",
-    required: [true, "Company ID Required"],
-  },
   company_alias: {
     type: new mongoose.Schema(companyFields, { _id: false }),
     required: [true, "Company alias data required"],
