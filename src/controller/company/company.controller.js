@@ -51,50 +51,40 @@ exports.addCompanyController = catchAsync(async (req, res, next) => {
 });
 
 // <-------- update company  --------->
-
 exports.updateCompanyController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
-  const { c_id } = req.query;
 
-  // ================= BASIC VALIDATION =================
+  // ================= VALIDATION =================
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant-Id", 400));
   }
 
-  if (!req.body || Object.keys(req.body).length === 0) {
-    return next(new AppError("company credentials missing", 400));
-  }
-
-  if (!c_id) {
-    return next(new AppError("company id missing", 400));
-  }
-
-  if (!mongoose.Types.ObjectId.isValid(c_id)) {
-    return next(new AppError("invalid company id", 400));
+  if (!req.body && (!req.files || req.files.length === 0)) {
+    return next(new AppError("Nothing to update", 400));
   }
 
   // ================= UPDATE DATA =================
-  const updatedData = {
-    ...req.body,
-  };
+  const updatedData = { ...req.body };
 
-  //  LOGO UPDATE (if sent)
-  if (req.files && req.files.length > 0) {
-    const logoFile = req.files.find((file) => file.fieldname === "logo");
-
-    if (logoFile) {
-      updatedData.logo = logoFile.path;
-    }
+  // LOGO (form-data)
+  if (req.files?.length) {
+    const logoFile = req.files.find((f) => f.fieldname === "logo");
+    if (logoFile) updatedData.logo = logoFile.path;
   }
-  const com = await companyModel.findOne({ _id: c_id, tenantId });
 
   const result = await companyModel.updateOne(
-    { _id: c_id, tenantId },
+    { tenantId },
     { $set: updatedData }
   );
 
+  // ================= RESULT HANDLING =================
+  if (result.matchedCount === 0) {
+    return next(new AppError("Company not found for this tenant", 404));
+  }
+
+  // IMPORTANT: modifiedCount 0 is NOT always an error
   if (result.modifiedCount === 0) {
-    return next(new AppError("Failed to update", 400));
+    return sendSuccess(res, "No changes detected", {}, 200, true);
   }
 
   return sendSuccess(res, "Update Successful", {}, 200, true);
