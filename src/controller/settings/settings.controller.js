@@ -14,6 +14,7 @@ const {
 const { fields } = require("../../middleware/cloudinaryMiddleware");
 const { isValidCustomUUID } = require("custom-uuid-generator");
 const { findOne } = require("../../models/workerCouter.model");
+const HoursSettingsModel = require("../../models/settingModels/hours.settings.model");
 
 // <--------- Custom Field setting start ------------>
 
@@ -292,7 +293,7 @@ exports.HoursSettingsController = catchAsync(async (req, res, next) => {
     tenantId,
   };
 
-  const hours_setting = await HoursSettingModel.findOneAndUpdate(
+  const hours_setting = await HoursSettingsModel.findOneAndUpdate(
     { tenantId }, // condition
     { $set: payload }, // update data
     {
