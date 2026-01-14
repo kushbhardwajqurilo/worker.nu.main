@@ -40,20 +40,61 @@ exports.addWorkerPosition = catchAsync(async (req, res, next) => {
 
 exports.getAllPositions = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
+
   if (!tenantId) {
-    return next(new AppError("tenant id missing in request", 400));
+    return next(new AppError("Tenant Id missing in headers", 400));
   }
+
   if (!isValidCustomUUID(tenantId)) {
-    return next(new AppError("Invalid Tenant-id", 400));
+    return next(new AppError("Invalid Tenant-Id", 400));
   }
-  const result = await workerPositionModel.find({
+
+  // ================= PAGINATION =================
+  const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
+  const limit =
+    Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 10;
+
+  const skip = (page - 1) * limit;
+
+  // ================= COUNT =================
+  const totalPositions = await workerPositionModel.countDocuments({
     tenantId,
     isDelete: { $ne: true },
   });
-  if (!result || result.length === 0) {
+
+  if (totalPositions === 0) {
     return next(new AppError("Position not found", 200));
   }
-  return sendSuccess(res, "success", result, 200, true);
+
+  // ================= LIST =================
+  const positionList = await workerPositionModel
+    .find({
+      tenantId,
+      isDelete: { $ne: true },
+    })
+    .skip(skip)
+    .limit(limit)
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const result = positionList.map((val, pos) => {
+    return { s_no: pos + 1, _id: val._id, position: val.position };
+  });
+  console.log(result);
+  // ================= RESPONSE =================
+  return sendSuccess(
+    res,
+    "Position list fetched successfully",
+    {
+      total: totalPositions,
+      page,
+      limit,
+      totalPages: Math.ceil(totalPositions / limit),
+      positions: result,
+    },
+    200,
+    true
+  );
 });
 
 exports.deletePosition = catchAsync(async (req, res, next) => {
@@ -86,113 +127,109 @@ exports.deletePosition = catchAsync(async (req, res, next) => {
 // <--------- worker position end ---------->
 // <---------- Holidays and sickness --------->
 
-exports.addOrUpdateHolidaySicknessSettings = catchAsync(
-  async (req, res, next) => {
-    const { tenantId } = req;
+exports.addOrUpdateHolidaySettings = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
 
-    /* -------------------- Tenant Validation -------------------- */
-    if (!tenantId) {
-      return next(new AppError("Tenant id missing in request", 400));
-    }
+  /* -------------------- Tenant Validation -------------------- */
+  if (!tenantId) {
+    return next(new AppError("Tenant id missing in request", 400));
+  }
 
-    if (!isValidCustomUUID(tenantId)) {
-      return next(new AppError("Invalid Tenant-id", 400));
-    }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
 
-    const { holiday, sickness } = req.body;
+  const { monthly_limit } = req.body;
 
-    if (!holiday && !sickness) {
-      return next(new AppError("Settings data missing", 400));
-    }
-
-    /* -------------------- Holiday Validation -------------------- */
-    if (
-      holiday?.monthly_limit !== undefined &&
-      (typeof holiday.monthly_limit !== "number" || holiday.monthly_limit < 0)
-    ) {
-      return next(
-        new AppError("Holiday monthly limit must be a positive number", 400)
-      );
-    }
-
-    if (
-      holiday?.enabled !== undefined &&
-      typeof holiday.enabled !== "boolean"
-    ) {
-      return next(new AppError("Holiday enabled must be boolean", 400));
-    }
-
-    /* -------------------- Sickness Validation -------------------- */
-    if (
-      sickness?.monthly_limit !== undefined &&
-      (typeof sickness.monthly_limit !== "number" || sickness.monthly_limit < 0)
-    ) {
-      return next(
-        new AppError("Sickness monthly limit must be a positive number", 400)
-      );
-    }
-
-    if (
-      sickness?.enabled !== undefined &&
-      typeof sickness.enabled !== "boolean"
-    ) {
-      return next(new AppError("Sickness enabled must be boolean", 400));
-    }
-
-    /* -------------------- Build Update Object -------------------- */
-    const updatePayload = {};
-
-    if (holiday) {
-      updatePayload["holiday.enabled"] = holiday.enabled ?? false;
-      updatePayload["holiday.monthly_limit"] = holiday.monthly_limit ?? 0;
-    }
-
-    if (sickness) {
-      updatePayload["sickness.enabled"] = sickness.enabled ?? false;
-      updatePayload["sickness.monthly_limit"] = sickness.monthly_limit ?? 0;
-    }
-
-    /* -------------------- Atomic Upsert (NO Race Condition) -------------------- */
-    const result = await HolidaySickness.findOneAndUpdate(
-      { tenantId },
-      { $set: updatePayload },
-      {
-        new: true,
-        upsert: true, // creates if not exists
-        runValidators: true, // schema-level safety
-      }
-    );
-
-    if (!result) {
-      return next(new AppError("Failed to save settings", 500));
-    }
-
-    /* -------------------- Worker Bulk Sync (Tenant Scoped) -------------------- */
-    const workerUpdate = {};
-
-    if (holiday?.monthly_limit !== undefined) {
-      workerUpdate["worker_holiday.holidays_per_month"] = holiday.monthly_limit;
-    }
-
-    if (sickness?.monthly_limit !== undefined) {
-      workerUpdate["worker_holiday.sickness_per_month"] =
-        sickness.monthly_limit;
-    }
-
-    if (Object.keys(workerUpdate).length > 0) {
-      await workerModel.updateMany({ tenantId }, { $set: workerUpdate });
-    }
-
-    /* -------------------- Success Response -------------------- */
-    return sendSuccess(
-      res,
-      "Holiday & sickness settings saved successfully",
-      result,
-      200,
-      true
+  if (
+    monthly_limit !== undefined &&
+    (typeof monthly_limit !== "number" || monthly_limit < 0)
+  ) {
+    return next(
+      new AppError("Holiday monthly limit must be a positive number", 400)
     );
   }
-);
+
+  /* -------------------- Update -------------------- */
+  const updatePayload = {
+    "holiday.monthly_limit": monthly_limit ?? 0,
+  };
+
+  const result = await HolidaySickness.findOneAndUpdate(
+    { tenantId },
+    { $set: updatePayload },
+    { new: true, upsert: true, runValidators: true }
+  );
+
+  /* -------------------- Worker Sync -------------------- */
+  if (monthly_limit !== undefined) {
+    await workerModel.updateMany(
+      { tenantId },
+      {
+        $set: {
+          "worker_holiday.holidays_per_month": monthly_limit,
+        },
+      }
+    );
+  }
+
+  return sendSuccess(res, "Holiday settings saved successfully", {}, 200, true);
+});
+
+exports.addOrUpdateSicknessSettings = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+
+  /* -------------------- Tenant Validation -------------------- */
+  if (!tenantId) {
+    return next(new AppError("Tenant id missing in request", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+
+  const { monthly_limit } = req.body;
+
+  if (
+    monthly_limit !== undefined &&
+    (typeof monthly_limit !== "number" || monthly_limit < 0)
+  ) {
+    return next(
+      new AppError("Sickness monthly limit must be a positive number", 400)
+    );
+  }
+
+  /* -------------------- Update -------------------- */
+  const updatePayload = {
+    "sickness.monthly_limit": monthly_limit ?? 0,
+  };
+
+  const result = await HolidaySickness.findOneAndUpdate(
+    { tenantId },
+    { $set: updatePayload },
+    { new: true, upsert: true, runValidators: true }
+  );
+
+  /* -------------------- Worker Sync -------------------- */
+  if (monthly_limit !== undefined) {
+    await workerModel.updateMany(
+      { tenantId },
+      {
+        $set: {
+          "worker_holiday.sickness_per_month": monthly_limit,
+        },
+      }
+    );
+  }
+
+  return sendSuccess(
+    res,
+    "Sickness settings saved successfully",
+    {},
+    200,
+    true
+  );
+});
 
 exports.getHolidaySicknessSettings = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
@@ -207,10 +244,32 @@ exports.getHolidaySicknessSettings = catchAsync(async (req, res, next) => {
   if (!settings) {
     return sendSuccess(res, "No settings found", {}, 200, true);
   }
-
-  return sendSuccess(res, "Settings fetched successfully", settings, 200, true);
+  const result = {
+    _id: settings._id,
+    monthly_limit: settings.sickness.monthly_limit,
+  };
+  return sendSuccess(res, "Settings fetched successfully", [result], 200, true);
 });
 
+exports.getHolidaySettings = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  if (!tenantId) {
+    return next(new AppError("tenant id missing in request", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+  const settings = await HolidaySickness.findOne({ tenantId });
+
+  if (!settings) {
+    return sendSuccess(res, "No settings found", {}, 200, true);
+  }
+  const result = {
+    _id: settings._id,
+    monthly_limit: settings.holiday.monthly_limit,
+  };
+  return sendSuccess(res, "Settings fetched successfully", [result], 200, true);
+});
 // <----------- Holidays and sickness end --------->
 
 //  jindagi mai jiski talash thi

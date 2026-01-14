@@ -8,6 +8,8 @@ const {
   RejectLeaveRequest,
   DeleteLeaveRequest,
   getApproveLeaves,
+  getReminders,
+  getSingleReminder,
 } = require("../controller/admin/admin.controller");
 const {
   authMiddeware,
@@ -36,6 +38,12 @@ adminRouter.patch(
 );
 
 // =================== Reminder ===================
+adminRouter.get(
+  "/reminders",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getReminders
+);
 adminRouter.post(
   "/project-reminder",
   authMiddeware,
@@ -47,6 +55,12 @@ adminRouter.put(
   authMiddeware,
   accessMiddleware("admin"),
   editReminder
+);
+adminRouter.get(
+  "/single-reminder",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getSingleReminder
 );
 adminRouter.delete(
   "/delete-reminder",
@@ -73,4 +87,5 @@ adminRouter.get(
   accessMiddleware("admin"),
   getApproveLeaves
 );
+
 module.exports = adminRouter;

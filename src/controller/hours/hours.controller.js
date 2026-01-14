@@ -161,6 +161,7 @@ const {
 const projectMode = require("../../models/projectMode");
 const puppeteer = require("puppeteer");
 const axios = require("axios");
+const { isValidCustomUUID } = require("custom-uuid-generator");
 
 exports.createWorkerHours = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
@@ -306,15 +307,51 @@ exports.getSingleHoursDetailsController = catchAsync(async (req, res, next) => {
 });
 
 exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
-  const { w_id } = req.query; // w_id means worker Object
-  if (!w_id || w_id.length === 0) {
-    return next(new AppError("w_id missing", 400));
+  const { tenantId } = req;
+
+  if (!tenantId) {
+    return next(new AppError("tenant-id missing", 400));
   }
-  const result = await hoursModel.find({ workerId: w_id });
-  if (!result || result.length === 0) {
-    return next(new AppError("Unable to fatch hours."));
+
+  // ================= CURRENT WEEK (MON–SUN) =================
+  const today = new Date();
+  const day = today.getDay() === 0 ? 7 : today.getDay();
+
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - day + 1);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+
+  // ================= FETCH DATA (LATEST FIRST) =================
+  const hoursData = await hoursModel.find({ tenantId }).sort({ createdAt: -1 });
+
+  // ================= UNIQUE WORKER (LATEST ONLY) =================
+  const workerMap = new Map();
+
+  for (const item of hoursData) {
+    if (!workerMap.has(item.workerId.toString())) {
+      workerMap.set(item.workerId.toString(), item);
+    }
   }
-  return sendSuccess(res, "success", result, 200, true);
+
+  // ================= ADD WEEK RANGE TO EACH RECORD =================
+  const finalData = Array.from(workerMap.values()).map((item) => ({
+    ...item.toObject(),
+    weekRange: {
+      startDate: weekStart.toISOString().split("T")[0],
+      endDate: weekEnd.toISOString().split("T")[0],
+      label: `${weekStart.getDate()}-${weekEnd.getDate()}`,
+    },
+  }));
+
+  return res.status(200).json({
+    status: true,
+    totalWorkers: finalData.length,
+    data: finalData,
+  });
 });
 
 // approve hours

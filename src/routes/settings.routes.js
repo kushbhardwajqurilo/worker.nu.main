@@ -1,8 +1,11 @@
 const {
-  addOrUpdateHolidaySicknessSettings,
   addWorkerPosition,
   getAllPositions,
   deletePosition,
+  addOrUpdateHolidaySettings,
+  addOrUpdateSicknessSettings,
+  getHolidaySicknessSettings,
+  getHolidaySettings,
 } = require("../controller/settings/settings.controller");
 const {
   authMiddeware,
@@ -30,9 +33,27 @@ settingsRouter.delete(
 );
 // Holiday & sickness
 settingsRouter.post(
-  "/leaves",
+  "/holiday",
   authMiddeware,
   accessMiddleware("admin"),
-  addOrUpdateHolidaySicknessSettings
+  addOrUpdateHolidaySettings
+);
+settingsRouter.post(
+  "/sickness",
+  authMiddeware,
+  accessMiddleware("admin"),
+  addOrUpdateSicknessSettings
+);
+settingsRouter.get(
+  "/get-sickness",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getHolidaySicknessSettings
+);
+settingsRouter.get(
+  "/get-holiday",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getHolidaySettings
 );
 module.exports = settingsRouter;

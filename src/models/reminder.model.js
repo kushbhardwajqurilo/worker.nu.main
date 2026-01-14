@@ -1,42 +1,46 @@
 const mongoose = require("mongoose");
-const ReminderSchema = new mongoose.Schema({
-  workerId: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "worker",
-      default: null,
+const ReminderSchema = new mongoose.Schema(
+  {
+    tenantId: {
+      type: String,
+      required: [true, "Tenant-id Missing"],
     },
-  ],
-  manager: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "auth",
-    default: null,
-  },
-  title: {
-    type: String,
-    required: [true, "title required"],
-  },
-  date: {
-    type: Date,
-    required: [true, "date required"],
-  },
-  reminderFor: {
-    type: String,
-    enum: {
-      values: ["worker", "manager", "both"],
-      message: "Reminder should be for worker, manager, or both",
+    workerId: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "worker",
+        default: null,
+      },
+    ],
+    title: {
+      type: String,
+      required: [true, "title required"],
     },
+    date: {
+      type: Date,
+      required: [true, "date required"],
+    },
+    reminderFor: {
+      type: String,
+      enum: {
+        values: ["worker", "manager", "both", "project"],
+        message: "Reminder should be for worker, manager, or both",
+      },
+    },
+    note: {
+      type: String,
+      required: [true, "note required"],
+    },
+    isSent: {
+      type: Boolean,
+      default: false,
+    },
+    project: [
+      { type: mongoose.Schema.Types.ObjectId, default: null, ref: "project" },
+    ],
   },
-  note: {
-    type: String,
-    required: [true, "note required"],
-  },
-  isSent: {
-    type: Boolean,
-    default: false,
-  },
-  project: [{ type: mongoose.Schema.Types.ObjectId, default: null }],
-});
+  { timestamps: true }
+);
 
 const NotificationSchema = new mongoose.Schema({
   userId: {

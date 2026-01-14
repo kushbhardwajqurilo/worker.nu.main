@@ -1,52 +1,49 @@
 const mongoose = require("mongoose");
 
-// ================== CUSTOM FIELD =================
-
-// hoildays and sickness
-
 const holidaySicknessSettingsSchema = new mongoose.Schema(
   {
     tenantId: {
       type: String,
-      required: [true, "tenant Required"],
-      unique: true,
+      required: [true, "Tenant id is required"],
       index: true,
+      unique: true,
     },
+
     holiday: {
-      enabled: {
-        type: Boolean,
-        default: false, // Holiday submission for worker (toggle)
-      },
       monthly_limit: {
         type: Number,
-        min: 0,
-        default: 0, // No. of holiday in a month
+        min: [0, "Holiday limit cannot be negative"],
+        default: 0,
+        validate: {
+          validator: Number.isInteger,
+          message: "Holiday monthly limit must be an integer",
+        },
       },
     },
 
     sickness: {
-      enabled: {
-        type: Boolean,
-        default: false, // Sickness submission for worker (toggle)
-      },
       monthly_limit: {
         type: Number,
-        min: 0,
-        default: 0, // No. of sickness in a month
+        min: [0, "Sickness limit cannot be negative"],
+        default: 0,
+        validate: {
+          validator: Number.isInteger,
+          message: "Sickness monthly limit must be an integer",
+        },
       },
     },
   },
   {
     timestamps: true,
+    versionKey: false,
   }
 );
 
-// ================== MODELS ==================
+holidaySicknessSettingsSchema.index({ tenantId: 1 }, { unique: true });
 
 const HolidaySickness = mongoose.model(
-  "leaves-setting",
+  "holiday_sickness_settings",
   holidaySicknessSettingsSchema
 );
-module.exports = {
-  HolidaySickness,
-};
+
+module.exports = { HolidaySickness };

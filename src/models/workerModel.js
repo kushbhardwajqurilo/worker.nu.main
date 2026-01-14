@@ -134,20 +134,23 @@ const workerSchema = new mongoose.Schema(
 );
 
 // ==== WORKER POSITION SCHEMA FIXED ====
-const workerPositionSchema = new mongoose.Schema({
-  tenantId: {
-    type: String,
-    required: true,
+const workerPositionSchema = new mongoose.Schema(
+  {
+    tenantId: {
+      type: String,
+      required: true,
+    },
+    position: {
+      type: String,
+      required: [true, "position required"],
+    },
+    isDelete: {
+      type: Boolean,
+      default: false,
+    },
   },
-  position: {
-    type: String,
-    required: [true, "position required"],
-  },
-  isDelete: {
-    type: Boolean,
-    default: false,
-  },
-});
+  { timestamps: true }
+);
 
 const workerPositionModel = mongoose.model(
   "worker_position",

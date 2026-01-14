@@ -367,115 +367,332 @@ exports.RejectLeaveRequest = catchAsync(async (req, res, next) => {
   }
 });
 // <-------------- REMINDERS ----------->
+function formatDateDDMMYYYY(dateString) {
+  if (!dateString) return "";
+
+  const date = new Date(dateString);
+
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+
+  return `${day}/${month}/${year}`;
+}
+
+exports.getReminders = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+
+  if (!tenantId) {
+    return next(new AppError("tenant-id missing", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+
+  // ================= PAGINATION =================
+  const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
+  const limit =
+    Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 10;
+
+  const skip = (page - 1) * limit;
+
+  // ================= TOTAL COUNT =================
+  const totalReminders = await WorkerReminder.countDocuments({ tenantId });
+
+  // ================= FETCH DATA =================
+  const reminders = await WorkerReminder.find({ tenantId })
+    .populate({
+      path: "project",
+      select: "project_details.project_name",
+    })
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  if (!reminders.length) {
+    return sendSuccess(
+      res,
+      "no reminder found",
+      {
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+        reminders: [],
+      },
+      200,
+      true
+    );
+  }
+
+  // ================= FORMAT RESPONSE =================
+  const formattedData = reminders.map((val, pos) => ({
+    s_no: skip + pos + 1,
+    _id: val._id,
+    date: formatDateDDMMYYYY(val.date),
+    title: val.title,
+    reminderFor: val.reminderFor,
+    notes: val.note,
+    isSent: val.isSent,
+    project: val.project?.map((p) => ({
+      _id: p._id,
+      project_name: p.project_details.project_name,
+    })),
+  }));
+
+  return sendSuccess(
+    res,
+    "reminder fetched successfully",
+    {
+      total: totalReminders,
+      page,
+      limit,
+      totalPages: Math.ceil(totalReminders / limit),
+      reminders: formattedData,
+    },
+    200,
+    true
+  );
+});
+
 exports.setProjectReminder = catchAsync(async (req, res, next) => {
-  const requiredField = ["title", "note", "date", "reminderFor"];
-  for (let fields of requiredField) {
-    if (
-      !req.body[fields] ||
-      req.body[fields].toString().trim().length === 0 ||
-      req.body[fields] == undefined
-    ) {
-      return next(new AppError(`${fields} missing.`, 400));
+  const { tenantId } = req;
+
+  /* ---------- TENANT VALIDATION ---------- */
+  if (!tenantId) {
+    return next(new AppError("tenant-id missing", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid tenant-id", 400));
+  }
+
+  const {
+    title,
+    note,
+    date,
+    reminderFor,
+    workerId,
+    worker, // backward compatibility
+    project,
+  } = req.body;
+
+  /* ---------- BASIC VALIDATION ---------- */
+  if (!title?.trim()) return next(new AppError("title missing", 400));
+  if (!note?.trim()) return next(new AppError("note missing", 400));
+  if (!date) return next(new AppError("date missing", 400));
+  if (!reminderFor) return next(new AppError("reminderFor missing", 400));
+
+  /* ---------- NORMALIZE ARRAYS ---------- */
+  const workers = Array.isArray(workerId)
+    ? workerId
+    : Array.isArray(worker)
+    ? worker
+    : [];
+
+  const projects = Array.isArray(project) ? project : [];
+
+  const hasWorker = workers.length > 0;
+  const hasProject = projects.length > 0;
+
+  /* ---------- STRICT VALIDATION (NEW RULES) ---------- */
+
+  // manager → nothing allowed
+  if (reminderFor === "manager") {
+    if (hasWorker || hasProject) {
+      return next(
+        new AppError("Manager reminder should not have worker or project", 400)
+      );
     }
   }
+
+  // worker → worker required, project not allowed
+  if (reminderFor === "worker") {
+    if (!hasWorker) {
+      return next(new AppError("Worker is required", 400));
+    }
+    if (hasProject) {
+      return next(new AppError("Project not allowed for worker reminder", 400));
+    }
+  }
+
+  // project → project required, worker not allowed
+  if (reminderFor === "project") {
+    if (!hasProject) {
+      return next(new AppError("Project is required", 400));
+    }
+    if (hasWorker) {
+      return next(new AppError("Worker not allowed for project reminder", 400));
+    }
+  }
+
+  // both → worker required, project optional
+  if (reminderFor === "both") {
+    if (!hasWorker) {
+      return next(new AppError("Worker is required for both reminder", 400));
+    }
+  }
+
+  /* ---------- BUILD PAYLOAD ---------- */
   const reminderPayload = {
-    title: req.body.title,
-    note: req.body.note,
-    date: req.body.date,
-    project: req.body.project || null,
+    tenantId,
+    title: title.trim(),
+    note: note.trim(),
+    date,
+    reminderFor,
+    workerId: workers, // empty array allowed only for manager/project
+    project: projects, // empty array allowed except project type
   };
 
-  if (req.body.reminderFor === "worker") {
-    reminderPayload["reminderFor"] = req.body.reminderFor;
-    reminderPayload["workerId"] = req.body.worker;
-  }
-  if (req.body.reminderFor === "manager") {
-    reminderPayload["reminderFor"] = req.body.reminderFor;
-    reminderPayload["manager"] = req.body.manager;
-  }
-  if (req.body.reminderFor === "both") {
-    reminderPayload["reminderFor"] = req.body.reminderFor;
-    reminderPayload["workerId"] = req.body.worker;
-    reminderPayload["manager"] = req.body.manager;
-  }
   const reminder = await WorkerReminder.create(reminderPayload);
   if (!reminder) {
-    return next(new AppError("Try again later", 400));
+    return next(new AppError("new reminders not founds", 400));
   }
-  return sendSuccess(res, "Reminder Set Successfully", {}, 200, true);
+  return sendSuccess(res, "Reminder set successfully", {}, 201, true);
 });
 
 // <-------- Edit Reminder -------->
 exports.editReminder = catchAsync(async (req, res, next) => {
-  const { admin_id } = req;
+  const { tenantId } = req;
   const { r_id } = req.query;
 
-  // ===== BASIC VALIDATION =====
-  if (!admin_id) {
-    return next(new AppError("Admin Credential Missing", 400));
+  /* ---------- TENANT VALIDATION ---------- */
+  if (!tenantId) {
+    return next(new AppError("tenant-id missing", 400));
   }
 
-  if (!mongoose.Types.ObjectId.isValid(admin_id)) {
-    return next(new AppError("Invalid Admin Credential", 400));
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid tenant-id", 400));
   }
 
-  if (!r_id) {
-    return next(new AppError("Reminder ID Missing", 400));
+  if (!r_id || !mongoose.Types.ObjectId.isValid(r_id)) {
+    return next(new AppError("Invalid reminder id", 400));
   }
 
-  if (!mongoose.Types.ObjectId.isValid(r_id)) {
-    return next(new AppError("Invalid Reminder ID", 400));
-  }
-
-  // ===== FIND REMINDER (NOT SENT ONLY) =====
-  const reminder = await WorkerReminder.findOne({
-    _id: r_id,
-  });
+  /* ---------- FIND REMINDER ---------- */
+  const reminder = await WorkerReminder.findOne({ _id: r_id, tenantId });
 
   if (!reminder) {
-    return next(new AppError("No reminder found or already sent", 404));
+    return next(new AppError("Reminder not found", 404));
   }
+
   if (reminder.isSent) {
-    return next(
-      new AppError(
-        "Cannot edit reminder because it has already been sent.",
-        200
-      )
-    );
-  }
-  // ===== BUILD UPDATE PAYLOAD =====
-  const reminderPayload = {
-    title: req.body.title,
-    note: req.body.note,
-    date: req.body.date,
-    project: req.body.project,
-    reminderFor: req.body.reminderFor,
-  };
-
-  if (req.body.reminderFor === "worker") {
-    reminderPayload.workerId = req.body.worker;
-    reminderPayload.manager = undefined;
+    return next(new AppError("Cannot edit reminder after it is sent", 400));
   }
 
-  if (req.body.reminderFor === "manager") {
-    reminderPayload.manager = req.body.manager;
-    reminderPayload.workerId = undefined;
+  const {
+    title,
+    note,
+    date,
+    reminderFor,
+    workerId,
+    worker, // backward compatibility
+    project,
+  } = req.body;
+
+  /* ---------- NORMALIZE ARRAYS ---------- */
+  const workers = Array.isArray(workerId)
+    ? workerId
+    : Array.isArray(worker)
+    ? worker
+    : reminder.workerId || [];
+
+  const projects = Array.isArray(project) ? project : reminder.project || [];
+
+  const finalReminderFor = reminderFor || reminder.reminderFor;
+
+  const hasWorker = workers.length > 0;
+  const hasProject = projects.length > 0;
+
+  /* ---------- STRICT VALIDATION (SAME AS SET) ---------- */
+
+  // manager → nothing allowed
+  if (finalReminderFor === "manager") {
+    if (hasWorker || hasProject) {
+      return next(
+        new AppError("Manager reminder should not have worker or project", 400)
+      );
+    }
   }
 
-  if (req.body.reminderFor === "both") {
-    reminderPayload.workerId = req.body.worker;
-    reminderPayload.manager = req.body.manager;
+  // worker → worker required, project not allowed
+  if (finalReminderFor === "worker") {
+    if (!hasWorker) {
+      return next(new AppError("Worker is required", 400));
+    }
+    if (hasProject) {
+      return next(new AppError("Project not allowed for worker reminder", 400));
+    }
   }
 
-  // ===== UPDATE =====
-  await WorkerReminder.updateOne({ _id: r_id }, { $set: reminderPayload });
+  // project → project required, worker not allowed
+  if (finalReminderFor === "project") {
+    if (!hasProject) {
+      return next(new AppError("Project is required", 400));
+    }
+    if (hasWorker) {
+      return next(new AppError("Worker not allowed for project reminder", 400));
+    }
+  }
 
-  return sendSuccess(res, "Reminder edited successfully", {}, 200, true);
+  // both → worker required, project optional
+  if (finalReminderFor === "both") {
+    if (!hasWorker) {
+      return next(new AppError("Worker is required for both reminder", 400));
+    }
+  }
+
+  /* ---------- BUILD UPDATE PAYLOAD ---------- */
+  const updatePayload = {};
+
+  if (title) updatePayload.title = title.trim();
+  if (note) updatePayload.note = note.trim();
+  if (date) updatePayload.date = date;
+  if (reminderFor) updatePayload.reminderFor = reminderFor;
+
+  updatePayload.workerId = workers;
+  updatePayload.project = projects;
+
+  const updatedReminder = await WorkerReminder.findOneAndUpdate(
+    { _id: r_id, tenantId },
+    { $set: updatePayload },
+    { new: true }
+  );
+
+  return sendSuccess(res, "Reminder updated successfully", {}, 200, true);
 });
 
+// get single reminder
+exports.getSingleReminder = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  const { r_id } = req.query;
+  /* ---------- VALIDATION ---------- */
+  if (!tenantId) {
+    return next(new AppError("tenant-id missing", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid tenant-id", 400));
+  }
+
+  if (!r_id || !mongoose.Types.ObjectId.isValid(r_id)) {
+    return next(new AppError("Invalid reminder id", 400));
+  }
+  const reminder = await WorkerReminder.findOne({
+    _id: r_id,
+    tenantId,
+  });
+  if (!reminder) {
+    return next(new AppError("reminder not found", 400));
+  }
+
+  return sendSuccess(res, "data found", [reminder], 200, true);
+});
 // <--------- delete reminder ----------->
 exports.deleteReminder = catchAsync(async (req, res, next) => {
-  const { admin_id } = req;
+  const { admin_id, tenantId } = req;
   const { r_id } = req.query;
   if (!admin_id || admin_id.length === 0) {
     return next(new AppError("Admin Credential Missing", 400));
@@ -490,7 +707,7 @@ exports.deleteReminder = catchAsync(async (req, res, next) => {
   if (!mongoose.Types.ObjectId.isValid(r_id)) {
     return next(new AppError("Invalid Reminder ID", 400));
   }
-  const query = await WorkerReminder.deleteOne({ _id: r_id });
+  const query = await WorkerReminder.deleteOne({ _id: r_id, tenantId });
   if (query.deletedCount === 0) {
     return next(new AppError("failed to delete", 400));
   }

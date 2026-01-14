@@ -35,7 +35,12 @@ hoursRouter.get("/single", getSingleHoursDetailsController);
 // example: /hours/single?h_id=12345
 
 /* ---------------- GET ALL HOURS OF WORKER ------------- */
-hoursRouter.get("/worker-all", getAllHoursOfWorkerController);
+hoursRouter.get(
+  "/worker-all",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getAllHoursOfWorkerController
+);
 // example: /hours/worker-all?w_id=12345
 
 /* ---------------- GET WEEKLY GROUPED HOURS ------------ */

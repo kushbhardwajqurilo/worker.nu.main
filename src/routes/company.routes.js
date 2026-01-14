@@ -31,7 +31,12 @@ companyRouter.put(
   uploadDocuments,
   updateCompanyController
 );
-companyRouter.get("/get-company", getCompanyDetailController);
+companyRouter.get(
+  "/get-company",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getCompanyDetailController
+);
 
 // compay alias routes
 companyRouter.post(
@@ -41,8 +46,18 @@ companyRouter.post(
   uploadDocuments,
   addCompanyAlias
 );
-companyRouter.get("/get-single-alias", getSingleCompanyAliasController);
-companyRouter.get("/get-all-alias", getAllCompanyAliasController);
+companyRouter.get(
+  "/get-single-alias",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getSingleCompanyAliasController
+);
+companyRouter.get(
+  "/get-all-alias",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getAllCompanyAliasController
+);
 companyRouter.put("/update-alias", updateCompanyAliasController);
 companyRouter.delete("/delete-single_alias", deleteCompanyAliasController);
 companyRouter.delete("/multiple-alias", deleteMultipleCompanyAliasController);

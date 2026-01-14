@@ -103,18 +103,11 @@ exports.getCompanyDetailController = catchAsync(async (req, res, next) => {
   if (!req.query || req.query.length === 0) {
     return next(new AppError("company credentails missing"));
   }
-  if (!req.query.c_id || req.query.c_id.length === 0) {
-    return next(new AppError("company id missing", 400));
-  }
-  if (!mongoose.Types.ObjectId.isValid(req.query.c_id)) {
-    return next(new AppError("Invalid company id", 400));
-  }
-
-  const find = await companyModel.findOne({ _id: req.query.c_id, tenantId });
+  const find = await companyModel.findOne({ tenantId });
   if (!find || find.length === 0) {
     return next(new AppError("failed to fatch", 400));
   }
-  return sendSuccess(res, "success", find, 200, true);
+  return sendSuccess(res, "success", [find], 200, true);
 });
 
 // <------- get company details end -------->
@@ -174,13 +167,6 @@ exports.getAllCompanyAliasController = catchAsync(async (req, res, next) => {
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant-Id", 400));
   }
-  const { c_id } = req.query;
-  if (!c_id || c_id.length === 0) {
-    return next(new AppError("company id missing", 400));
-  }
-  if (!mongoose.Types.ObjectId.isValid(c_id)) {
-    return next(new AppError("invalid company id", 400));
-  }
   const companyAlias = await companyAliasModel.find({
     tenantId,
     isDelete: { $ne: true },
@@ -198,16 +184,8 @@ exports.getSingleCompanyAliasController = catchAsync(async (req, res, next) => {
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant-Id", 400));
   }
-  const { c_id } = req.query;
-  if (!c_id || c_id.length === 0) {
-    return next(new AppError("company id missing", 400));
-  }
-  if (!mongoose.Types.ObjectId.isValid(c_id)) {
-    return next(new AppError("invalid company id", 400));
-  }
   const result = await companyAliasModel.findOne({
     tenantId,
-    _id: c_id,
     isDelete: { $ne: true },
   });
   if (!result) {

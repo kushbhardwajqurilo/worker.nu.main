@@ -32,7 +32,7 @@ const startReminder = cron.schedule(
         if (reminder.manager !== null && reminder.reminderFor === "manager") {
           console.log("reminder", reminder);
           await Notification.create({
-            userId: reminder.manager,
+            userId: reminder.userId,
             title: reminder.title,
             message: reminder.note,
           });
