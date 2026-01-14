@@ -13,6 +13,7 @@ const {
 } = require("../../models/workerModel");
 const { fields } = require("../../middleware/cloudinaryMiddleware");
 const { isValidCustomUUID } = require("custom-uuid-generator");
+const { findOne } = require("../../models/workerCouter.model");
 
 // <--------- Custom Field setting start ------------>
 
@@ -272,4 +273,39 @@ exports.getHolidaySettings = catchAsync(async (req, res, next) => {
 });
 // <----------- Holidays and sickness end --------->
 
-//  jindagi mai jiski talash thi
+// <---------- Hours Settings start ----------------->
+
+exports.HoursSettingsController = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+
+  if (!tenantId) {
+    return next(new AppError("tenant id missing in request", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+
+  // jo bhi fields update/add karni ho
+  const payload = {
+    ...req.body,
+    tenantId,
+  };
+
+  const hours_setting = await HoursSettingModel.findOneAndUpdate(
+    { tenantId }, // condition
+    { $set: payload }, // update data
+    {
+      new: true, // updated/new document return kare
+      upsert: true, // agar nahi mile to insert kare
+    }
+  );
+
+  return res.status(200).json({
+    status: true,
+    message: "Hours settings saved successfully",
+    data: hours_setting,
+  });
+});
+
+//  <------------- Hours settings end --------------->
