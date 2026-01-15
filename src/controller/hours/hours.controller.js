@@ -317,7 +317,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
     return next(new AppError("Invalid Tenant-Id", 400));
   }
 
-  /* ---------- PAGINATION (SAME AS CLIENT) ---------- */
+  /* ---------- PAGINATION (CLIENT STYLE) ---------- */
   const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
   const limit =
     Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 10;
@@ -335,9 +335,6 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
   weekEnd.setHours(23, 59, 59, 999);
-
-  /* ---------- TOTAL COUNT ---------- */
-  const totalRecords = await hoursModel.countDocuments({ tenantId });
 
   /* ---------- FETCH DATA ---------- */
   const hoursData = await hoursModel
@@ -358,8 +355,6 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
       },
     ])
     .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
     .lean();
 
   /* ---------- UNIQUE WORKER (LATEST ENTRY) ---------- */
@@ -390,7 +385,6 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
   /* ---------- WEEK RANGE LABEL ---------- */
   const formatWeekRangeLabel = (startDate, endDate) => {
     const options = { day: "numeric", month: "short" };
-
     const start = new Date(startDate);
     const end = new Date(endDate);
 
@@ -400,8 +394,8 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
     )} - ${end.toLocaleDateString("en-IN", options)} ${end.getFullYear()}`;
   };
 
-  /* ---------- FINAL DATA ---------- */
-  const finalData = Array.from(workerMap.values()).map((obj) => ({
+  /* ---------- TRANSFORM DATA ---------- */
+  const transformedData = Array.from(workerMap.values()).map((obj) => ({
     _id: obj._id,
     tenantId: obj.tenantId,
 
@@ -443,21 +437,164 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
     },
   }));
 
-  /* ---------- RESPONSE (SAME STYLE AS CLIENT) ---------- */
+  /* ---------- APPLY PAGINATION ON FINAL DATA ---------- */
+  const paginatedData = transformedData.slice(skip, skip + limit);
+
+  /* ---------- RESPONSE (TOTAL = RESPONSE DATA COUNT) ---------- */
   return sendSuccess(
     res,
     "Worker hours fetched successfully",
     {
-      total: totalRecords,
+      total: paginatedData.length,
       page,
       limit,
-      totalPages: Math.ceil(totalRecords / limit),
-      data: finalData,
+      totalPages: Math.ceil(paginatedData.length / limit),
+      data: paginatedData,
     },
     200,
     true
   );
 });
+
+//  get single worker hours for weekly
+exports.getSingleWorkerWeeklyHoursController = catchAsync(
+  async (req, res, next) => {
+    const { tenantId } = req;
+    const { workerId } = req.query;
+    const weekOffset = Number(req.query.weekOffset) || 0;
+
+    /* ---------- VALIDATION ---------- */
+    if (!tenantId) {
+      return next(new AppError("Tenant Id missing in headers", 400));
+    }
+
+    if (!isValidCustomUUID(tenantId)) {
+      return next(new AppError("Invalid Tenant-Id", 400));
+    }
+
+    if (!workerId) {
+      return next(new AppError("Worker Id missing", 400));
+    }
+
+    /* ---------- WEEK CALCULATION (MON–SUN) ---------- */
+    const today = new Date();
+    const day = today.getDay() === 0 ? 7 : today.getDay();
+
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - day + 1 + weekOffset * 7);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    /* ---------- FETCH DATA ---------- */
+    const hoursData = await hoursModel
+      .find({
+        tenantId,
+        workerId,
+        createdAt: { $gte: weekStart, $lte: weekEnd },
+      })
+      .populate([
+        {
+          path: "project.projectId",
+          select: "project_details.project_name",
+        },
+        {
+          path: "workerId",
+          select:
+            "worker_personal_details.firstName worker_personal_details.lastName worker_position",
+          populate: {
+            path: "worker_position",
+            select: "position",
+          },
+        },
+      ])
+      .sort({ createdAt: 1 })
+      .lean();
+
+    /* ---------- HOURS FORMATTER ---------- */
+    const formatHours = (decimalHours = 0) => {
+      const hours = Math.floor(decimalHours);
+      const minutes = Math.round((decimalHours - hours) * 60);
+
+      return {
+        decimal: decimalHours.toFixed(2),
+        hours,
+        minutes,
+        label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
+      };
+    };
+
+    /* ---------- WEEK RANGE LABEL ---------- */
+    const formatWeekRangeLabel = (startDate, endDate) => {
+      const options = { day: "numeric", month: "short" };
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      return `${start.toLocaleDateString(
+        "en-IN",
+        options
+      )} - ${end.toLocaleDateString("en-IN", options)} ${end.getFullYear()}`;
+    };
+
+    /* ---------- TRANSFORM DATA ---------- */
+    const finalData = hoursData.map((obj) => ({
+      _id: obj._id,
+
+      date: obj.createdAt,
+
+      project: obj.project?.projectId
+        ? {
+            _id: obj.project.projectId._id,
+            project_name:
+              obj.project.projectId.project_details?.project_name || "",
+            project_date: obj.project.project_date,
+          }
+        : null,
+
+      start_working_hours: obj.start_working_hours,
+      finish_hours: obj.finish_hours,
+      break_time: obj.break_time,
+      day_off: obj.day_off,
+      status: obj.status,
+      comments: obj.comments,
+      image: obj.image,
+
+      total_hours: formatHours(obj.total_hours),
+    }));
+
+    /* ---------- WORKER INFO (FROM FIRST RECORD) ---------- */
+    const workerInfo = hoursData[0]?.workerId
+      ? {
+          _id: hoursData[0].workerId._id,
+          firstName:
+            hoursData[0].workerId.worker_personal_details?.firstName || "",
+          lastName:
+            hoursData[0].workerId.worker_personal_details?.lastName || "",
+          position: hoursData[0].workerId.worker_position?.[0]?.position || "",
+        }
+      : null;
+
+    /* ---------- RESPONSE ---------- */
+    return sendSuccess(
+      res,
+      "Worker weekly hours fetched successfully",
+      {
+        worker: workerInfo,
+        weekRange: {
+          startDate: weekStart.toISOString().split("T")[0],
+          endDate: weekEnd.toISOString().split("T")[0],
+          label: formatWeekRangeLabel(weekStart, weekEnd),
+        },
+        totalDays: finalData.length,
+        data: finalData,
+      },
+      200,
+      true
+    );
+  }
+);
 
 // approve hours
 exports.approveHours = catchAsync(async (req, res, next) => {

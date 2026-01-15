@@ -8,6 +8,7 @@ const {
   getWeeklyHours,
   approveWeek,
   dashboardHours,
+  getSingleWorkerWeeklyHoursController,
 } = require("../controller/hours/hours.controller");
 const {
   authMiddeware,
@@ -60,4 +61,10 @@ hoursRouter.patch("/approve-week", approveWeek);
 // dashboard hours
 hoursRouter.get("/get-hours", dashboardHours);
 
+hoursRouter.get(
+  "/single-worker-hour",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getSingleWorkerWeeklyHoursController
+);
 module.exports = hoursRouter;
