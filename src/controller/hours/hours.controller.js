@@ -305,15 +305,26 @@ exports.getSingleHoursDetailsController = catchAsync(async (req, res, next) => {
   }
   return sendSuccess(res, "", result, 200, true);
 });
-
 exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
 
+  /* ---------- TENANT VALIDATION ---------- */
   if (!tenantId) {
-    return next(new AppError("tenant-id missing", 400));
+    return next(new AppError("Tenant Id missing in headers", 400));
   }
 
-  // ================= CURRENT WEEK (MON–SUN) =================
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-Id", 400));
+  }
+
+  /* ---------- PAGINATION (SAME AS CLIENT) ---------- */
+  const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
+  const limit =
+    Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 10;
+
+  const skip = (page - 1) * limit;
+
+  /* ---------- CURRENT WEEK (MON–SUN) ---------- */
   const today = new Date();
   const day = today.getDay() === 0 ? 7 : today.getDay();
 
@@ -325,33 +336,127 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
   weekEnd.setDate(weekStart.getDate() + 6);
   weekEnd.setHours(23, 59, 59, 999);
 
-  // ================= FETCH DATA (LATEST FIRST) =================
-  const hoursData = await hoursModel.find({ tenantId }).sort({ createdAt: -1 });
+  /* ---------- TOTAL COUNT ---------- */
+  const totalRecords = await hoursModel.countDocuments({ tenantId });
 
-  // ================= UNIQUE WORKER (LATEST ONLY) =================
+  /* ---------- FETCH DATA ---------- */
+  const hoursData = await hoursModel
+    .find({ tenantId })
+    .populate([
+      {
+        path: "project.projectId",
+        select: "project_details.project_name",
+      },
+      {
+        path: "workerId",
+        select:
+          "worker_personal_details.firstName worker_personal_details.lastName worker_position",
+        populate: {
+          path: "worker_position",
+          select: "position",
+        },
+      },
+    ])
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  /* ---------- UNIQUE WORKER (LATEST ENTRY) ---------- */
   const workerMap = new Map();
-
   for (const item of hoursData) {
-    if (!workerMap.has(item.workerId.toString())) {
-      workerMap.set(item.workerId.toString(), item);
+    const key = item.workerId?._id
+      ? item.workerId._id.toString()
+      : item.workerId.toString();
+
+    if (!workerMap.has(key)) {
+      workerMap.set(key, item);
     }
   }
 
-  // ================= ADD WEEK RANGE TO EACH RECORD =================
-  const finalData = Array.from(workerMap.values()).map((item) => ({
-    ...item.toObject(),
+  /* ---------- HOURS FORMATTER ---------- */
+  const formatHours = (decimalHours = 0) => {
+    const hours = Math.floor(decimalHours);
+    const minutes = Math.round((decimalHours - hours) * 60);
+
+    return {
+      decimal: decimalHours.toFixed(2),
+      hours,
+      minutes,
+      label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
+    };
+  };
+
+  /* ---------- WEEK RANGE LABEL ---------- */
+  const formatWeekRangeLabel = (startDate, endDate) => {
+    const options = { day: "numeric", month: "short" };
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    return `${start.toLocaleDateString(
+      "en-IN",
+      options
+    )} - ${end.toLocaleDateString("en-IN", options)} ${end.getFullYear()}`;
+  };
+
+  /* ---------- FINAL DATA ---------- */
+  const finalData = Array.from(workerMap.values()).map((obj) => ({
+    _id: obj._id,
+    tenantId: obj.tenantId,
+
+    worker: obj.workerId
+      ? {
+          _id: obj.workerId._id,
+          firstName: obj.workerId.worker_personal_details?.firstName || "",
+          lastName: obj.workerId.worker_personal_details?.lastName || "",
+          position: obj.workerId.worker_position?.[0]?.position || "",
+        }
+      : null,
+
+    project: obj.project?.projectId
+      ? {
+          _id: obj.project.projectId._id,
+          project_name:
+            obj.project.projectId.project_details?.project_name || "",
+          project_date: obj.project.project_date,
+        }
+      : null,
+
+    weekNumber: obj.weekNumber,
+    status: obj.status,
+    day_off: obj.day_off,
+    start_working_hours: obj.start_working_hours,
+    finish_hours: obj.finish_hours,
+    break_time: obj.break_time,
+    comments: obj.comments,
+    image: obj.image,
+    createdAt: obj.createdAt,
+    updatedAt: obj.updatedAt,
+
+    total_hours: formatHours(obj.total_hours),
+
     weekRange: {
       startDate: weekStart.toISOString().split("T")[0],
       endDate: weekEnd.toISOString().split("T")[0],
-      label: `${weekStart.getDate()}-${weekEnd.getDate()}`,
+      label: formatWeekRangeLabel(weekStart, weekEnd),
     },
   }));
 
-  return res.status(200).json({
-    status: true,
-    totalWorkers: finalData.length,
-    data: finalData,
-  });
+  /* ---------- RESPONSE (SAME STYLE AS CLIENT) ---------- */
+  return sendSuccess(
+    res,
+    "Worker hours fetched successfully",
+    {
+      total: totalRecords,
+      page,
+      limit,
+      totalPages: Math.ceil(totalRecords / limit),
+      data: finalData,
+    },
+    200,
+    true
+  );
 });
 
 // approve hours

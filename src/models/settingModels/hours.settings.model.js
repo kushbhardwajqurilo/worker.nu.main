@@ -1,6 +1,10 @@
 const mongoose = require("mongoose");
 const hoursSettingSchema = new mongoose.Schema({
-  tenantId: { type: String, required: [true, "tenant id missing"] },
+  tenantId: {
+    type: String,
+    required: [true, "tenant id missing"],
+    unique: true,
+  },
   late_submission: {
     max_day_limit: {
       type: Number,
@@ -23,6 +27,5 @@ const hoursSettingSchema = new mongoose.Schema({
     },
   },
 });
-
 const HoursSettingsModel = mongoose.model("hours_settings", hoursSettingSchema);
 module.exports = HoursSettingsModel;

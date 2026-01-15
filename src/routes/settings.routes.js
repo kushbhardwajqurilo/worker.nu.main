@@ -7,6 +7,7 @@ const {
   getHolidaySicknessSettings,
   getHolidaySettings,
   HoursSettingsController,
+  getHoursSettingsControlle,
 } = require("../controller/settings/settings.controller");
 const {
   authMiddeware,
@@ -63,5 +64,11 @@ settingsRouter.post(
   authMiddeware,
   accessMiddleware("admin"),
   HoursSettingsController
+);
+settingsRouter.get(
+  "/get-hour-setting",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getHoursSettingsControlle
 );
 module.exports = settingsRouter;

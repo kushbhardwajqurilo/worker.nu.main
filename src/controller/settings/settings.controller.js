@@ -309,4 +309,20 @@ exports.HoursSettingsController = catchAsync(async (req, res, next) => {
   });
 });
 
+// get hours settings
+exports.getHoursSettingsControlle = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  if (!tenantId) {
+    return next(new AppError("Tenant-id missing", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-Id", 400));
+  }
+
+  const data = await HoursSettingsModel.findOne({ tenantId });
+  if (!data) {
+    return sendSuccess(res, "no data found", [], 200, true);
+  }
+  return sendSuccess(res, "data fetched", [data], 201, true);
+});
 //  <------------- Hours settings end --------------->
