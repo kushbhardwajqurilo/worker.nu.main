@@ -253,21 +253,21 @@ exports.adminForgetPasswordController = catchAsync(async (req, res, next) => {
 // admin logout
 
 exports.adminLogoutController = catchAsync(async (req, res, next) => {
-  const { refresh_token } = req.headers;
+  const { admin_id } = req;
 
   // 1. Check refresh token
-  if (!refresh_token || refresh_token.trim().length === 0) {
+  if (!admin_id || admin_id.trim().length === 0) {
     return next(new AppError("Refresh Token Missing", 400));
   }
 
   // 2. Check token exists in DB
-  const tokenExists = await tokenMode.findOne({ token: refresh_token });
+  const tokenExists = await tokenMode.findOne({ userId: admin_id });
 
   if (!tokenExists) {
     // Already logged out OR invalid token
     return sendSuccess(res, "Already Logged Out", {}, 200, true);
   }
   // 3. Delete refresh token (invalidate session)
-  await tokenMode.deleteOne({ token: refresh_token });
+  await tokenMode.deleteOne({ userId: admin_id });
   return sendSuccess(res, "Logout Successfully", {}, 200, true);
 });

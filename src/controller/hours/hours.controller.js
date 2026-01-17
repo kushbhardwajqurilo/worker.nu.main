@@ -189,6 +189,7 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
     comments,
     workerId,
     image: file.path,
+    createdBy: req.role,
   };
 
   if (!workerId || !mongoose.isValidObjectId(workerId))
@@ -221,17 +222,52 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
 exports.updateWorkerHours = catchAsync(async (req, res, next) => {
   const { h_id } = req.query;
 
-  if (!h_id || !mongoose.isValidObjectId(h_id))
+  if (!h_id || !mongoose.isValidObjectId(h_id)) {
     return next(new AppError("Invalid ID", 400));
+  }
 
-  const updated = await hoursModel.findOneAndUpdate({ _id: h_id }, req.body, {
-    new: true,
-    runValidators: true,
-  });
+  const hoursDoc = await hoursModel.findById(h_id);
+  if (!hoursDoc) {
+    return next(new AppError("Record not found", 404));
+  }
 
-  if (!updated) return next(new AppError("Record not found", 404));
+  const {
+    project,
+    day_off,
+    start_working_hours,
+    finish_hours,
+    break_time,
+    comments,
+  } = req.body;
 
-  return sendSuccess(res, "Hours updated successfully", updated, 200, true);
+  // ✅ SAFE ASSIGNMENT
+  if (project) hoursDoc.project = project;
+  if (typeof day_off === "boolean") hoursDoc.day_off = day_off;
+
+  if (start_working_hours) {
+    hoursDoc.start_working_hours = {
+      hours: Number(start_working_hours.hours),
+      minutes: Number(start_working_hours.minutes),
+    };
+  }
+
+  if (finish_hours) {
+    hoursDoc.finish_hours = {
+      hours: Number(finish_hours.hours),
+      minutes: Number(finish_hours.minutes),
+    };
+  }
+
+  if (break_time) {
+    hoursDoc.break_time = String(break_time);
+  }
+
+  if (comments) hoursDoc.comments = comments;
+
+  // 🔥 save() → pre("save") hook runs
+  await hoursDoc.save();
+
+  return sendSuccess(res, "Hours updated successfully", hoursDoc, 200, true);
 });
 
 exports.getWeeklyHours = catchAsync(async (req, res, next) => {
@@ -394,7 +430,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
     )} - ${end.toLocaleDateString("en-IN", options)} ${end.getFullYear()}`;
   };
 
-  /* ---------- TRANSFORM DATA ---------- */
+  /* ---------- TRANSFORM DATA (WEEK-BASED FINAL LIST) ---------- */
   const transformedData = Array.from(workerMap.values()).map((obj) => ({
     _id: obj._id,
     tenantId: obj.tenantId,
@@ -427,7 +463,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
     image: obj.image,
     createdAt: obj.createdAt,
     updatedAt: obj.updatedAt,
-
+    createdBy: obj?.createdBy || "",
     total_hours: formatHours(obj.total_hours),
 
     weekRange: {
@@ -437,18 +473,18 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
     },
   }));
 
-  /* ---------- APPLY PAGINATION ON FINAL DATA ---------- */
+  /* ---------- APPLY PAGINATION AFTER LOGIC ---------- */
   const paginatedData = transformedData.slice(skip, skip + limit);
 
-  /* ---------- RESPONSE (TOTAL = RESPONSE DATA COUNT) ---------- */
+  /* ---------- RESPONSE (TOTAL = WEEK-BASED TOTAL) ---------- */
   return sendSuccess(
     res,
     "Worker hours fetched successfully",
     {
-      total: paginatedData.length,
+      total: transformedData.length, // ✅ FIXED: week-based total
       page,
       limit,
-      totalPages: Math.ceil(paginatedData.length / limit),
+      totalPages: Math.ceil(transformedData.length / limit),
       data: paginatedData,
     },
     200,
@@ -498,7 +534,8 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
       .populate([
         {
           path: "project.projectId",
-          select: "project_details.project_name",
+          select:
+            "project_details.prject_name project_details.project_location_address",
         },
         {
           path: "workerId",
@@ -512,7 +549,6 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
       ])
       .sort({ createdAt: 1 })
       .lean();
-
     /* ---------- HOURS FORMATTER ---------- */
     const formatHours = (decimalHours = 0) => {
       const hours = Math.floor(decimalHours);
@@ -525,7 +561,6 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
         label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
       };
     };
-
     /* ---------- WEEK RANGE LABEL ---------- */
     const formatWeekRangeLabel = (startDate, endDate) => {
       const options = { day: "numeric", month: "short" };
@@ -538,18 +573,30 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
       )} - ${end.toLocaleDateString("en-IN", options)} ${end.getFullYear()}`;
     };
 
-    /* ---------- TRANSFORM DATA ---------- */
+    /* ---------- TRANSFORM DATA (WORKER INSIDE EACH ROW) ---------- */
+
     const finalData = hoursData.map((obj) => ({
       _id: obj._id,
-
       date: obj.createdAt,
+
+      worker: obj.workerId
+        ? {
+            _id: obj.workerId._id,
+            firstName: obj.workerId.worker_personal_details?.firstName || "",
+            lastName: obj.workerId.worker_personal_details?.lastName || "",
+            position: obj.workerId.worker_position?.[0]?.position || "",
+          }
+        : null,
 
       project: obj.project?.projectId
         ? {
             _id: obj.project.projectId._id,
             project_name:
               obj.project.projectId.project_details?.project_name || "",
-            project_date: obj.project.project_date,
+            project_date: obj.project.project_date || "",
+            address:
+              obj.project.projectId.project_details?.project_location_address ||
+              "",
           }
         : null,
 
@@ -557,44 +604,105 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
       finish_hours: obj.finish_hours,
       break_time: obj.break_time,
       day_off: obj.day_off,
+      weekNumber: obj.weekNumber,
       status: obj.status,
       comments: obj.comments,
       image: obj.image,
-
+      createdBy: obj?.createdBy || "",
       total_hours: formatHours(obj.total_hours),
     }));
-
-    /* ---------- WORKER INFO (FROM FIRST RECORD) ---------- */
-    const workerInfo = hoursData[0]?.workerId
-      ? {
-          _id: hoursData[0].workerId._id,
-          firstName:
-            hoursData[0].workerId.worker_personal_details?.firstName || "",
-          lastName:
-            hoursData[0].workerId.worker_personal_details?.lastName || "",
-          position: hoursData[0].workerId.worker_position?.[0]?.position || "",
-        }
-      : null;
 
     /* ---------- RESPONSE ---------- */
     return sendSuccess(
       res,
       "Worker weekly hours fetched successfully",
-      {
-        worker: workerInfo,
-        weekRange: {
-          startDate: weekStart.toISOString().split("T")[0],
-          endDate: weekEnd.toISOString().split("T")[0],
-          label: formatWeekRangeLabel(weekStart, weekEnd),
-        },
-        totalDays: finalData.length,
-        data: finalData,
-      },
+      finalData,
       200,
       true
     );
   }
 );
+
+// update worker hours comment
+exports.updateHoursCommment = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  const { h_id } = req.query;
+  const { comment } = req.body;
+
+  /* ---------- TENANT VALIDATION ---------- */
+  if (!tenantId) {
+    return next(new AppError("Tenant Id missing in headers", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-Id", 400));
+  }
+
+  /* ---------- HOURS ID VALIDATION ---------- */
+  if (!h_id) {
+    return next(new AppError("Hours id missing", 400));
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(h_id)) {
+    return next(new AppError("Invalid worker hours-id", 400));
+  }
+
+  /* ---------- COMMENT VALIDATION ---------- */
+  if (!comment || !comment.trim()) {
+    return next(new AppError("Comment is required", 400));
+  }
+
+  /* ---------- UPDATE COMMENT ---------- */
+  const hoursUpdate = await hoursModel.findOneAndUpdate(
+    { _id: h_id, tenantId },
+    { $set: { comments: comment.trim() } },
+    { new: true }
+  );
+
+  if (!hoursUpdate) {
+    return next(new AppError("Submitted hour not found", 404));
+  }
+
+  return sendSuccess(res, "Comment updated successfully", {}, 200, true);
+});
+
+// update worker hors time
+exports.updateTimeInHours = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  const { id } = req.query; // worker_hours document id
+
+  const { start_working_hours, finish_hours } = req.body;
+
+  if (!tenantId) {
+    return next(new AppError("Tenant Id missing in headers", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-Id", 400));
+  }
+
+  const hoursDoc = await hoursModel.findOne({
+    _id: id,
+    tenantId,
+  });
+
+  if (!hoursDoc) {
+    return next(new AppError("Worker hours not found", 404));
+  }
+
+  //
+  if (start_working_hours) {
+    hoursDoc.start_working_hours = start_working_hours;
+  }
+
+  if (finish_hours) {
+    hoursDoc.finish_hours = finish_hours;
+  }
+
+  await hoursDoc.save();
+
+  return sendSuccess(res, "update success", {}, 201, true);
+});
 
 // approve hours
 exports.approveHours = catchAsync(async (req, res, next) => {

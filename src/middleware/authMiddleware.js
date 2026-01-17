@@ -93,9 +93,37 @@ const workerAuthMiddleware = catchAsync(async (req, res, next) => {
   req.role = workerInfo.role;
   next();
 });
+const workerOrAdminAuthMiddleware = async (req, res, next) => {
+  // 🔹 try worker auth first
+  workerAuthMiddleware(req, res, (err) => {
+    if (!err) {
+      // worker verified
+      req.authType = "worker";
+      return next();
+    }
+
+    // 🔹 worker failed → try admin auth
+    authMiddeware(req, res, (adminErr) => {
+      if (!adminErr) {
+        // admin verified
+        req.authType = "admin";
+        return next();
+      }
+
+      // ❌ both failed
+      return next(
+        new AppError("Unauthorized: worker or admin token required", 401)
+      );
+    });
+  });
+};
+
+module.exports = workerOrAdminAuthMiddleware;
+
 module.exports = {
   authMiddeware,
   accessMiddleware,
   clientAuthMiddleware,
   workerAuthMiddleware,
+  workerOrAdminAuthMiddleware,
 };

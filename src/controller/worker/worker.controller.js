@@ -1110,18 +1110,22 @@ exports.getAllProjectsToWorkerAddController = catchAsync(
 
 // <----------- search worker end ------------>
 
-// ------------------------------------------------ ADMIN DASHBOARD API END --------------------------------------------------
+// <------------------------------------------------ ADMIN DASHBOARD API END -------------------------------------------------->
 
 // <----------------- worker dashboard api start ------------------>
 
 // <---------- Holiday / Sickness ------------>
-exports.requestHoliday = catchAsync(async (req, res, next) => {
+exports.requestLeave = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
   const { w_id } = req.query;
+  const { range, reason, leaveType } = req.body;
+
+  /* ---------- TENANT VALIDATION ---------- */
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid tenant-id", 400));
   }
 
+  /* ---------- WORKER ID VALIDATION ---------- */
   if (!w_id) {
     return next(new AppError("w_id missing", 400));
   }
@@ -1130,7 +1134,10 @@ exports.requestHoliday = catchAsync(async (req, res, next) => {
     return next(new AppError("Invalid w_id", 400));
   }
 
-  const { range, reason } = req.body;
+  /* ---------- BODY VALIDATION ---------- */
+  if (!leaveType || !["holiday", "sickness"].includes(leaveType)) {
+    return next(new AppError("Invalid leaveType (holiday | sickness)", 400));
+  }
 
   if (!range || !range.startDate || !range.endDate || !reason) {
     return next(
@@ -1145,10 +1152,12 @@ exports.requestHoliday = catchAsync(async (req, res, next) => {
     return next(new AppError("startDate cannot be greater than endDate", 400));
   }
 
+  /* ---------- WORKER CHECK ---------- */
   const isWorker = await workerModel.findOne({
-    tenantId: tenantId,
+    tenantId,
     _id: w_id,
   });
+
   if (!isWorker) {
     return next(new AppError("Worker not found", 400));
   }
@@ -1157,9 +1166,11 @@ exports.requestHoliday = catchAsync(async (req, res, next) => {
     return next(new AppError("Worker not active", 400));
   }
 
+  /* ---------- TOTAL DAYS ---------- */
   const totalDays =
     Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
 
+  /* ---------- COMMON PAYLOAD ---------- */
   const payload = {
     tenantId,
     workerId: w_id,
@@ -1168,79 +1179,24 @@ exports.requestHoliday = catchAsync(async (req, res, next) => {
       endDate,
       totalDays,
     },
-    reason: reason,
   };
 
-  const leaveRequest = await holidayModel.create(payload);
+  let leaveRequest;
 
-  return sendSuccess(
-    res,
-    "Leave request submitted successfully",
-    leaveRequest,
-    201,
-    true
-  );
-});
-
-exports.requestSickness = catchAsync(async (req, res, next) => {
-  // console.log(req.body);
-  const { tenantId } = req;
-  if (!isValidCustomUUID(tenantId)) {
-    return next(new AppError("Invalid Tenatn-id", 400));
-  }
-  const { w_id } = req.query;
-
-  // ✅ w_id validation
-  if (!w_id) {
-    return next(new AppError("w_id missing", 400));
+  /* ---------- INSERT BASED ON TYPE ---------- */
+  if (leaveType === "holiday") {
+    leaveRequest = await holidayModel.create({
+      ...payload,
+      reason,
+    });
   }
 
-  if (!mongoose.Types.ObjectId.isValid(w_id)) {
-    return next(new AppError("Invalid w_id", 400));
+  if (leaveType === "sickness") {
+    leaveRequest = await sicknessModel.create({
+      ...payload,
+      description: reason,
+    });
   }
-
-  const { range, description } = req.body;
-
-  // ✅ body validation
-  if (!range || !range.startDate || !range.endDate || !description) {
-    return next(
-      new AppError("startDate, endDate and description are required", 400)
-    );
-  }
-
-  const startDate = new Date(range.startDate);
-  const endDate = new Date(range.endDate);
-
-  if (startDate > endDate) {
-    return next(new AppError("startDate cannot be greater than endDate", 400));
-  }
-
-  // ✅ worker check
-  const isWorker = await workerModel.findOne({ tenantId: tenantId, _id: w_id });
-  if (!isWorker) {
-    return next(new AppError("Worker not found", 400));
-  }
-
-  if (isWorker.isDelete || !isWorker.isActive) {
-    return next(new AppError("Worker not active", 400));
-  }
-
-  // ✅ total days calculation (inclusive)
-  const totalDays =
-    Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
-
-  const payload = {
-    tenantId: tenantId,
-    workerId: w_id,
-    duration: {
-      startDate,
-      endDate,
-      totalDays,
-    },
-    description,
-  };
-
-  const leaveRequest = await sicknessModel.create(payload);
 
   return sendSuccess(
     res,

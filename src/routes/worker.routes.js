@@ -7,18 +7,18 @@ const {
   makeInActiveWorker,
   multipleDeleteWorkerController,
   searchWorkerController,
-  requestHoliday,
-  requestSickness,
   getHolidays,
   getSickness,
   workerSignature,
   getAllProjectsToWorkerAddController,
   getAllPositions,
+  requestLeave,
 } = require("../controller/worker/worker.controller");
 const {
   authMiddeware,
   accessMiddleware,
   workerAuthMiddleware,
+  workerOrAdminAuthMiddleware,
 } = require("../middleware/authMiddleware");
 const uploadSignature = require("../middleware/signature.middleware");
 const { uploadDocuments } = require("../middleware/upload.middleware");
@@ -75,10 +75,10 @@ workerRouter.get(
 );
 
 workerRouter.post(
-  "/request-holiday",
-  workerAuthMiddleware,
-  accessMiddleware("worker"),
-  requestHoliday
+  "/request-leave",
+  workerOrAdminAuthMiddleware,
+  accessMiddleware("worker", "admin"),
+  requestLeave
 );
 workerRouter.get(
   "/get-projects",
@@ -93,12 +93,6 @@ workerRouter.get(
   getAllPositions
 );
 
-workerRouter.post(
-  "/request-sickness",
-  workerAuthMiddleware,
-  accessMiddleware("worker"),
-  requestSickness
-);
 workerRouter.get("/get-holiday", getHolidays);
 workerRouter.get("/get-sickness", getSickness);
 workerRouter.post("/signature", workerSignature);
