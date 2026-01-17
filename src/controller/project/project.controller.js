@@ -10,7 +10,6 @@ const clientModel = require("../../models/clientModel");
 const hoursModel = require("../../models/hoursModel");
 
 exports.addProjectController = catchAsync(async (req, res, next) => {
-  // console.log(req.body);
   const { tenantId } = req;
 
   if (!tenantId || !isValidCustomUUID(tenantId)) {
@@ -29,24 +28,24 @@ exports.addProjectController = catchAsync(async (req, res, next) => {
   // ================= PARSE BODY =================
   const project_details = parseJSON(
     req.body.project_details,
-    "project_details"
+    "project_details",
   );
   const daily_work_hour_raw = parseJSON(
     req.body.daily_work_hour,
-    "daily_work_hour"
+    "daily_work_hour",
   );
   const project_workers = parseJSON(
     req.body.project_workers,
-    "project_workers"
+    "project_workers",
   );
   const pdw_raw = parseJSON(
     req.body.project_details_for_workers,
-    "project_details_for_workers"
+    "project_details_for_workers",
   );
   const client_details = parseJSON(req.body.client_details, "client_details");
   const project_time_economical_details = parseJSON(
     req.body.project_time_economical_details,
-    "project_time_economical_details"
+    "project_time_economical_details",
   );
 
   // ================= DAILY WORK HOUR =================
@@ -136,7 +135,7 @@ exports.addProjectController = catchAsync(async (req, res, next) => {
       _id: project._id,
     },
     201,
-    true
+    true,
   );
 });
 
@@ -177,7 +176,7 @@ exports.getAllProjectsController = catchAsync(async (req, res, next) => {
       "No page found",
       { total: totalCount, page, limit, totalPage, projects: [] },
       200,
-      true
+      true,
     );
   }
 
@@ -247,7 +246,7 @@ exports.getAllProjectsController = catchAsync(async (req, res, next) => {
           worker_name: `${worker.worker_personal_details.firstName} ${worker.worker_personal_details.lastName}`,
           profile_picture:
             worker.personal_information?.documents?.profile_picture ?? null,
-        })
+        }),
       );
     }
 
@@ -284,7 +283,7 @@ exports.getAllProjectsController = catchAsync(async (req, res, next) => {
       projects: formattedProjects,
     },
     200,
-    true
+    true,
   );
 });
 
@@ -350,7 +349,7 @@ exports.updateProjectController = catchAsync(async (req, res, next) => {
   if (req.body.project_details) {
     setUpdate.project_details = parseJSON(
       req.body.project_details,
-      "project_details"
+      "project_details",
     );
   }
 
@@ -372,21 +371,21 @@ exports.updateProjectController = catchAsync(async (req, res, next) => {
   if (req.body.project_workers) {
     setUpdate.project_workers = parseJSON(
       req.body.project_workers,
-      "project_workers"
+      "project_workers",
     );
   }
 
   if (req.body.client_details) {
     setUpdate.client_details = parseJSON(
       req.body.client_details,
-      "client_details"
+      "client_details",
     );
   }
 
   if (req.body.project_time_economical_details) {
     setUpdate.project_time_economical_details = parseJSON(
       req.body.project_time_economical_details,
-      "project_time_economical_details"
+      "project_time_economical_details",
     );
   }
 
@@ -444,7 +443,7 @@ exports.updateProjectController = catchAsync(async (req, res, next) => {
   if (req.body.project_details_for_workers) {
     const pdw = parseJSON(
       req.body.project_details_for_workers,
-      "project_details_for_workers"
+      "project_details_for_workers",
     );
 
     if (pdw?.description) {
@@ -468,7 +467,7 @@ exports.updateProjectController = catchAsync(async (req, res, next) => {
   const project = await projectMode.findOneAndUpdate(
     { tenantId, _id: project_id },
     updateQuery,
-    { new: true, runValidators: true }
+    { new: true, runValidators: true },
   );
 
   if (!project) {
@@ -496,7 +495,7 @@ exports.deleteProjectController = catchAsync(async (req, res, next) => {
   const project = await projectMode.findByIdAndUpdate(
     p_id,
     { isDelete: true },
-    { new: true }
+    { new: true },
   );
   if (!project) {
     return next(new AppError("Project not found", 400));
@@ -561,7 +560,7 @@ exports.addWorkerInProject = catchAsync(async (req, res, next) => {
       $set: {
         "project_workers.workers": w_id,
       },
-    }
+    },
   );
 
   return sendSuccess(res, "worker updated successfully", {}, 200, true);
@@ -577,29 +576,62 @@ exports.workerList = catchAsync(async (req, res, next) => {
   }
 
   if (!isValidCustomUUID(tenantId)) {
-    return next(new AppError("Invalid Tenant-id", 400));
+    return next(new AppError("Invalid tenant-id", 400));
   }
 
-  // Get all active workers
+  /* ================= PROJECT WISE WORKERS ================= */
+  if (p_id && p_id !== "undefined") {
+    if (!mongoose.Types.ObjectId.isValid(p_id)) {
+      return next(new AppError("Invalid project id", 400));
+    }
+
+    const projectData = await projectMode
+      .findOne({
+        tenantId,
+        _id: p_id,
+        isDelete: false,
+      })
+      .populate({
+        path: "project_workers.workers",
+        match: { isDelete: false },
+        select:
+          "worker_personal_details.firstName worker_personal_details.lastName",
+      });
+
+    if (!projectData) {
+      return next(new AppError("Project not found", 404));
+    }
+
+    const workers = projectData.project_workers?.workers || [];
+
+    const formattedData = workers.map((val) => ({
+      _id: val._id,
+      firstName: val.worker_personal_details?.firstName || "",
+      lastName: val.worker_personal_details?.lastName || "",
+    }));
+
+    return sendSuccess(
+      res,
+      "Workers fetched successfully",
+      formattedData,
+      200,
+      true,
+    );
+  }
+
+  /* ================= ALL WORKERS ================= */
   const workers = await workerModel.find({
     tenantId,
     isDelete: false,
   });
 
-  if (!workers || workers.length === 0) {
-    return sendSuccess(res, "success", [], 200, true);
-  }
+  const workersList = workers.map((val) => ({
+    _id: val._id,
+    firstName: val.worker_personal_details?.firstName || "",
+    lastName: val.worker_personal_details?.lastName || "",
+  }));
 
-  // Get project
-  const workersList = workers.map((val) => {
-    return {
-      _id: val._id,
-      firstName: val.worker_personal_details.firstName,
-      lastName: val.worker_personal_details.lastName,
-    };
-  });
-
-  return sendSuccess(res, "success", workersList, 200, true);
+  return sendSuccess(res, "Success", workersList, 200, true);
 });
 
 exports.clientList = catchAsync(async (req, res, next) => {
@@ -667,7 +699,7 @@ exports.getProjectPictures = catchAsync(async (req, res, next) => {
           }
         : null,
       date_of_submission: createdAt,
-    })
+    }),
   );
   return sendSuccess(res, "project picture found", filterDataa, 200, true);
 });
@@ -748,4 +780,33 @@ exports.getProjectEconomy = catchAsync(async (req, res, next) => {
   };
 
   return sendSuccess(res, "data fetch", formatedData, 200, true);
+});
+
+// project worker list
+exports.projectWorkerList = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  const { p_id } = req.query;
+  if (!tenantId) {
+    return next(new AppError("failed to fetch", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("invalid tenant-id", 400));
+  }
+
+  if (!p_id) {
+    return next(new AppError("project missing id", 400));
+  }
+  if (!mongoose.Types.ObjectId.isValid(p_id)) {
+    return next(new AppError("Ivalid project id", 400));
+  }
+  const query = {
+    tenantId,
+    isDelete: false,
+  };
+  const projectData = await projectMode.find(query).populate({
+    path: "project_workers.workers",
+    select:
+      "_id worker_personal_details.firstName worker_personal_details.lastName",
+  });
+  console.log("projectData", projectData);
 });

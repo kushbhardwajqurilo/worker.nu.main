@@ -166,9 +166,7 @@ const { isValidCustomUUID } = require("custom-uuid-generator");
 exports.createWorkerHours = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
   const { file } = req;
-  // if (!file || file.length === 0 || file === undefined) {
-  //   return next(new AppError("Image Required", 400));
-  // }
+
   const {
     project,
     day_off,
@@ -178,42 +176,69 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
     comments,
     workerId,
   } = req.body;
+  /* ---------- SAFE JSON PARSE ---------- */
+  const safeParse = (value) => {
+    if (typeof value === "string") {
+      try {
+        return JSON.parse(value);
+      } catch (err) {
+        return next(new AppError("Invalid JSON format", 400));
+      }
+    }
+    return value;
+  };
 
+  const parsedProject = safeParse(project);
+  const parsedStartHours = safeParse(start_working_hours);
+  const parsedFinishHours = safeParse(finish_hours);
+
+  /* ---------- VALIDATION ---------- */
+  if (!workerId || !mongoose.isValidObjectId(workerId)) {
+    return next(new AppError("Invalid workerId", 400));
+  }
+
+  if (!parsedProject?.projectId) {
+    return next(new AppError("Project ID missing", 400));
+  }
+
+  if (!comments) {
+    return next(new AppError("Comments required", 400));
+  }
+
+  /* ---------- GET PROJECT DATE ---------- */
+  const projectData = await projectMode
+    .findById(parsedProject.projectId)
+    .lean();
+
+  if (!projectData) {
+    return next(new AppError("Project not found", 404));
+  }
+
+  const projectDate = projectData.project_details?.project_start_date;
+
+  if (!projectDate) {
+    return next(new AppError("Project start date missing", 400));
+  }
+
+  /* ---------- PAYLOAD ---------- */
   const payload = {
     tenantId,
-    project: JSON.parse(project),
-    start_working_hours: JSON.parse(start_working_hours),
-    finish_hours: JSON.parse(finish_hours),
+    project: parsedProject,
+    start_working_hours: parsedStartHours,
+    finish_hours: parsedFinishHours,
     day_off,
     break_time,
     comments,
     workerId,
-    image: file.path,
     createdBy: req.role,
   };
 
-  if (!workerId || !mongoose.isValidObjectId(workerId))
-    return next(new AppError("Invalid workerId", 400));
+  // ✅ IMAGE OPTIONAL
+  if (file?.path) {
+    payload.image = file.path;
+  }
 
-  if (!payload.project?.projectId)
-    return next(new AppError("Project ID missing", 400));
-
-  // 🔥 AUTO GET PROJECT DATE
-  const projectData = await projectMode
-    .findById(payload.project.projectId)
-    .lean();
-  if (!projectData) return next(new AppError("Project not found", 404));
-
-  const projectDate = projectData.project_details?.project_start_date;
-  if (!projectDate)
-    return next(new AppError("Project start date missing", 400));
-
-  if (!payload.start_working_hours?.hours || !payload.finish_hours?.hours)
-    return next(new AppError("Working hours missing", 400));
-
-  if (!comments || !payload.image)
-    return next(new AppError("Comments & image required", 400));
-
+  /* ---------- CREATE RECORD ---------- */
   const newRecord = await hoursModel.create(payload);
 
   return sendSuccess(res, "Hours added successfully", newRecord, 200, true);
@@ -318,7 +343,7 @@ exports.approveWeek = catchAsync(async (req, res, next) => {
 
   const result = await hoursModel.updateMany(
     { workerId, weekNumber },
-    { status: "approved" }
+    { status: "approved" },
   );
 
   return sendSuccess(
@@ -326,7 +351,7 @@ exports.approveWeek = catchAsync(async (req, res, next) => {
     `${result.modifiedCount} entries approved`,
     {},
     200,
-    true
+    true,
   );
 });
 
@@ -397,8 +422,8 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
   const workerMap = new Map();
   for (const item of hoursData) {
     const key = item.workerId?._id
-      ? item.workerId._id.toString()
-      : item.workerId.toString();
+      ? item.workerId?._id?.toString()
+      : item.workerId?.toString();
 
     if (!workerMap.has(key)) {
       workerMap.set(key, item);
@@ -426,7 +451,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
 
     return `${start.toLocaleDateString(
       "en-IN",
-      options
+      options,
     )} - ${end.toLocaleDateString("en-IN", options)} ${end.getFullYear()}`;
   };
 
@@ -455,7 +480,6 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
 
     weekNumber: obj.weekNumber,
     status: obj.status,
-    day_off: obj.day_off,
     start_working_hours: obj.start_working_hours,
     finish_hours: obj.finish_hours,
     break_time: obj.break_time,
@@ -488,7 +512,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
       data: paginatedData,
     },
     200,
-    true
+    true,
   );
 });
 
@@ -569,7 +593,7 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
 
       return `${start.toLocaleDateString(
         "en-IN",
-        options
+        options,
       )} - ${end.toLocaleDateString("en-IN", options)} ${end.getFullYear()}`;
     };
 
@@ -618,9 +642,9 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
       "Worker weekly hours fetched successfully",
       finalData,
       200,
-      true
+      true,
     );
-  }
+  },
 );
 
 // update worker hours comment
@@ -656,7 +680,7 @@ exports.updateHoursCommment = catchAsync(async (req, res, next) => {
   const hoursUpdate = await hoursModel.findOneAndUpdate(
     { _id: h_id, tenantId },
     { $set: { comments: comment.trim() } },
-    { new: true }
+    { new: true },
   );
 
   if (!hoursUpdate) {
@@ -716,7 +740,7 @@ exports.approveHours = catchAsync(async (req, res, next) => {
   const result = await hoursModel.findByIdAndUpdate(
     h_id,
     { status },
-    { new: true }
+    { new: true },
   );
 
   if (!result) return next(new AppError("Record not found", 404));
@@ -726,39 +750,56 @@ exports.approveHours = catchAsync(async (req, res, next) => {
 
 // <------- dahsboard hours --------->
 
-exports.dashboardHours = catchAsync(async (req, res, next) => {
-  const hours = await hoursModel.find({});
-
-  // 1️⃣ Pending Hours
-  const pendingHours = hours.reduce((acc, crr) => {
-    if (crr.status === "pending") {
-      return acc + Number(crr.total_hours || 0);
-    }
-    return acc;
-  }, 0);
-
-  // 2️⃣ Current Month Range
+exports.dashboardHours = catchAsync(async (req, res) => {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  // 3️⃣ Filter only this month's records
-  const currentMonthRecords = hours.filter((h) => {
-    return h.createdAt >= startOfMonth && h.createdAt < endOfMonth;
+  /* ---------- 1️⃣ Pending Hours ---------- */
+  const pendingResult = await hoursModel.aggregate([
+    { $match: { status: "pending" } },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: { $ifNull: ["$total_hours", 0] } },
+      },
+    },
+  ]);
+
+  /* ---------- 2️⃣ Total Hours (Current Month) ---------- */
+  const monthHoursResult = await hoursModel.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: startOfMonth, $lt: endOfMonth },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: { $ifNull: ["$total_hours", 0] } },
+      },
+    },
+  ]);
+
+  /* ---------- 3️⃣ ACTIVE PROJECTS (FIXED) ---------- */
+
+  // ⛔ DON'T include extra fields here
+  const projectIds = await hoursModel.distinct("project", {
+    createdAt: { $gte: startOfMonth, $lt: endOfMonth },
   });
 
-  // 4️⃣ Total hours for current month
-  const totalHoursThisMonth = currentMonthRecords.reduce((acc, h) => {
-    return acc + Number(h.total_hours || 0);
-  }, 0);
-
-  console.log("Pending Hours:", pendingHours);
-  console.log("Current Month Total Hours:", totalHoursThisMonth);
+  // ✅ projectIds = [ObjectId, ObjectId, ObjectId]
+  const activeProjectsThisMonth = await projectMode.countDocuments({
+    _id: { $in: projectIds },
+    tenantId: req.tenantId,
+    status: "active",
+  });
 
   res.status(200).json({
     success: true,
-    pendingHours,
-    totalHoursThisMonth,
+    pendingHours: pendingResult[0]?.total || 0,
+    totalHoursThisMonth: monthHoursResult[0]?.total || 0,
+    activeProjectsThisMonth,
   });
 });
 
@@ -773,7 +814,7 @@ exports.generateTimesheetPDF = async (req, res) => {
       "http://localhost:8002/api/v1/client/get-weekly-report",
       {
         params: { project, worker, date, status },
-      }
+      },
     );
 
     if (!response.data.status) {
@@ -856,7 +897,7 @@ exports.generateTimesheetPDF = async (req, res) => {
           }</td>
           <td>${h.finish_hours.hours}:${h.finish_hours.minutes}</td>
           <td>${h.total_hours}</td>
-        </tr>`
+        </tr>`,
         )
         .join("")}
     </tbody>

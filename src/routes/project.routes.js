@@ -10,6 +10,7 @@ const {
   markAsComplete,
   addWorkerInProject,
   getProjectEconomy,
+  projectWorkerList,
 } = require("../controller/project/project.controller");
 const {
   authMiddeware,
@@ -24,69 +25,76 @@ projectRouter.post(
   authMiddeware,
   accessMiddleware("admin"),
   uploadDocuments,
-  addProjectController
+  addProjectController,
 ); // add project route
 
 projectRouter.get(
   "/get-projects",
   authMiddeware,
   accessMiddleware("admin"),
-  getAllProjectsController
+  getAllProjectsController,
 ); // get all projects route
 
 projectRouter.get(
   "/get-project",
   authMiddeware,
   accessMiddleware("admin"),
-  getSingleProjectController
+  getSingleProjectController,
 ); // get single project route
 
 projectRouter.get(
   "/worker-list",
   authMiddeware,
   accessMiddleware("admin"),
-  workerList
+  workerList,
 );
 projectRouter.get(
   "/client-list",
   authMiddeware,
   accessMiddleware("admin"),
-  clientList
+  clientList,
 );
 projectRouter.get(
   "/project-picture",
   authMiddeware,
   accessMiddleware("admin"),
-  getProjectPictures
+  getProjectPictures,
 );
 projectRouter.patch(
   "/update-project",
   authMiddeware,
   accessMiddleware("admin"),
-  updateProjectController
+  updateProjectController,
 ); // update project route
 projectRouter.delete(
   "/delete-project",
   authMiddeware,
   accessMiddleware("admin"),
-  deleteProjectController
+  deleteProjectController,
 );
 projectRouter.patch(
   "/mark-complete",
   authMiddeware,
   accessMiddleware("admin"),
-  markAsComplete
+  markAsComplete,
 );
 projectRouter.put(
   "/add-update-worker",
   authMiddeware,
   accessMiddleware("admin"),
-  addWorkerInProject
+  addWorkerInProject,
 );
 projectRouter.get(
   "/project-economy",
   authMiddeware,
   accessMiddleware("admin"),
-  getProjectEconomy
+  getProjectEconomy,
+);
+
+projectRouter.get(
+  "/prject-workers",
+  authMiddeware,
+  accessMiddleware("admin"),
+  projectWorkerList,
 );
 module.exports = projectRouter;

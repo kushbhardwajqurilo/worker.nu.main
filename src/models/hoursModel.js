@@ -10,7 +10,6 @@ const workerHoursSchema = new mongoose.Schema(
     workerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "worker",
-      required: true,
     },
 
     project: {
@@ -50,7 +49,6 @@ const workerHoursSchema = new mongoose.Schema(
 
     break_time: {
       type: String,
-      required: true,
     },
 
     total_hours: {
@@ -59,13 +57,13 @@ const workerHoursSchema = new mongoose.Schema(
     },
 
     comments: { type: String, required: true },
-    image: { type: String, required: true },
+    image: { type: String },
     createdBy: {
       type: String,
       default: "worker",
     },
   },
-  { timestamps: true } // createdAt used
+  { timestamps: true }, // createdAt used
 );
 
 // ================= WEEK NUMBER LOGIC =================
@@ -123,7 +121,7 @@ workerHoursSchema.pre("findOneAndUpdate", async function () {
 
   const weekNumber = await calculateWeekNumber(
     existingDoc.workerId,
-    existingDoc.createdAt
+    existingDoc.createdAt,
   );
 
   update.$set = update.$set || {};

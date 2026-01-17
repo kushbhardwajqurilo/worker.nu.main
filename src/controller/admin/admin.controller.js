@@ -73,7 +73,7 @@ exports.getHolidayRequest = catchAsync(async (req, res, next) => {
         totalPages: Math.ceil(totalRecords / limit),
       },
       200,
-      true
+      true,
     );
   }
 
@@ -116,7 +116,7 @@ exports.getHolidayRequest = catchAsync(async (req, res, next) => {
       totalPages: Math.ceil(totalRecords / limit),
     },
     200,
-    true
+    true,
   );
 });
 
@@ -169,7 +169,6 @@ exports.getSicknessRequest = catchAsync(async (req, res, next) => {
       },
     })
     .lean();
-  console.log("holidat sicness", result);
   // ================= EMPTY SAFE RESPONSE =================
   if (!result || result.length === 0) {
     return sendSuccess(
@@ -183,7 +182,7 @@ exports.getSicknessRequest = catchAsync(async (req, res, next) => {
         totalPages: Math.ceil(totalRecords / limit),
       },
       200,
-      true
+      true,
     );
   }
 
@@ -226,7 +225,7 @@ exports.getSicknessRequest = catchAsync(async (req, res, next) => {
       totalPages: Math.ceil(totalRecords / limit),
     },
     200,
-    true
+    true,
   );
 });
 
@@ -423,7 +422,7 @@ exports.getReminders = catchAsync(async (req, res, next) => {
         reminders: [],
       },
       200,
-      true
+      true,
     );
   }
 
@@ -453,7 +452,7 @@ exports.getReminders = catchAsync(async (req, res, next) => {
       reminders: formattedData,
     },
     200,
-    true
+    true,
   );
 });
 
@@ -489,8 +488,8 @@ exports.setProjectReminder = catchAsync(async (req, res, next) => {
   const workers = Array.isArray(workerId)
     ? workerId
     : Array.isArray(worker)
-    ? worker
-    : [];
+      ? worker
+      : [];
 
   const projects = Array.isArray(project) ? project : [];
 
@@ -503,7 +502,7 @@ exports.setProjectReminder = catchAsync(async (req, res, next) => {
   if (reminderFor === "manager") {
     if (hasWorker || hasProject) {
       return next(
-        new AppError("Manager reminder should not have worker or project", 400)
+        new AppError("Manager reminder should not have worker or project", 400),
       );
     }
   }
@@ -596,8 +595,8 @@ exports.editReminder = catchAsync(async (req, res, next) => {
   const workers = Array.isArray(workerId)
     ? workerId
     : Array.isArray(worker)
-    ? worker
-    : reminder.workerId || [];
+      ? worker
+      : reminder.workerId || [];
 
   const projects = Array.isArray(project) ? project : reminder.project || [];
 
@@ -612,7 +611,7 @@ exports.editReminder = catchAsync(async (req, res, next) => {
   if (finalReminderFor === "manager") {
     if (hasWorker || hasProject) {
       return next(
-        new AppError("Manager reminder should not have worker or project", 400)
+        new AppError("Manager reminder should not have worker or project", 400),
       );
     }
   }
@@ -658,7 +657,7 @@ exports.editReminder = catchAsync(async (req, res, next) => {
   const updatedReminder = await WorkerReminder.findOneAndUpdate(
     { _id: r_id, tenantId },
     { $set: updatePayload },
-    { new: true }
+    { new: true },
   );
 
   return sendSuccess(res, "Reminder updated successfully", {}, 200, true);
@@ -779,7 +778,7 @@ exports.DeleteLeaveRequest = catchAsync(async (req, res, next) => {
       "Sickness leave deleted successfully",
       {},
       200,
-      true
+      true,
     );
   }
 
@@ -806,7 +805,7 @@ exports.DeleteLeaveRequest = catchAsync(async (req, res, next) => {
       "Holiday leave deleted successfully",
       {},
       200,
-      true
+      true,
     );
   }
 });
@@ -902,7 +901,7 @@ exports.getApproveLeaves = catchAsync(async (req, res, next) => {
         totalPages: Math.ceil(totalRecords / limit),
       },
       200,
-      true
+      true,
     );
   }
 
@@ -946,6 +945,6 @@ exports.getApproveLeaves = catchAsync(async (req, res, next) => {
       totalPages: Math.ceil(totalRecords / limit),
     },
     200,
-    true
+    true,
   );
 });
