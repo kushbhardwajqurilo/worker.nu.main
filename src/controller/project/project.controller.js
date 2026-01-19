@@ -143,6 +143,150 @@ exports.addProjectController = catchAsync(async (req, res, next) => {
 
 // <----- get all projects start --------->
 
+// exports.getAllProjectsController = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+
+//   if (!tenantId) {
+//     return next(new AppError("Tenant Missing The Request", 400));
+//   }
+
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid Tenant", 400));
+//   }
+
+//   // ================= PAGINATION =================
+//   const page = parseInt(req.query.page, 10) || 1;
+//   const limit = parseInt(req.query.limit, 10) || 5;
+//   const skip = (page - 1) * limit;
+
+//   // ================= QUERY =================
+//   const query = { tenantId, isDelete: false };
+
+//   const totalCount = await projectMode.countDocuments(query);
+
+//   if (totalCount === 0) {
+//     return sendSuccess(res, "no data found", [], 200, true);
+//   }
+
+//   const totalPage = Math.ceil(totalCount / limit);
+
+//   if (page > totalPage) {
+//     return sendSuccess(
+//       res,
+//       "No page found",
+//       { total: totalCount, page, limit, totalPage, projects: [] },
+//       200,
+//       true,
+//     );
+//   }
+
+//   // ================= FETCH PROJECTS =================
+//   const projects = await projectMode
+//     .find(query)
+//     .sort({ createdAt: -1 })
+//     .skip(skip)
+//     .limit(limit)
+//     .populate([
+//       {
+//         path: "project_workers.workers",
+//         select:
+//           "personal_information.documents.profile_picture worker_personal_details",
+//       },
+//       {
+//         path: "client_details.client",
+//         select: "_id client_details.client_name",
+//       },
+//       {
+//         path: "project_time_economical_details.hourly_rate.hourly_by_position.position",
+//         select: "position",
+//       },
+//     ])
+//     .lean();
+
+//   // ================= PROJECT IDS =================
+//   const projectedIds = projects.map((p) => p._id);
+
+//   // ================= TOTAL HOURS AGGREGATION =================
+//   const projectHours = await hoursModel.aggregate([
+//     {
+//       $match: {
+//         tenantId,
+//         "project.projectId": { $in: projectedIds },
+//       },
+//     },
+//     {
+//       $group: {
+//         _id: "$project.projectId",
+//         totalHours: { $sum: "$total_hours" },
+//       },
+//     },
+//     {
+//       $project: {
+//         totalHours: { $round: ["$totalHours", 2] },
+//       },
+//     },
+//   ]);
+
+//   // ================= MAP (projectId => totalHours) =================
+//   const hoursMap = {};
+//   projectHours.forEach((item) => {
+//     hoursMap[item._id.toString()] = item.totalHours;
+//   });
+
+//   // ================= FORMAT RESPONSE =================
+//   const formattedProjects = projects.map((project, index) => {
+//     // workers formatting
+//     if (
+//       project.project_workers &&
+//       Array.isArray(project.project_workers.workers)
+//     ) {
+//       project.project_workers.workers = project.project_workers.workers.map(
+//         (worker) => ({
+//           _id: worker._id,
+//           worker_name: `${worker.worker_personal_details.firstName} ${worker.worker_personal_details.lastName}`,
+//           profile_picture:
+//             worker.personal_information?.documents?.profile_picture ?? null,
+//         }),
+//       );
+//     }
+
+//     // client formatting
+//     let formattedClientDetails = null;
+//     if (project.client_details) {
+//       formattedClientDetails = {
+//         _id: project.client_details.client?._id ?? null,
+//         client_name:
+//           project.client_details.client?.client_details?.client_name ?? null,
+//         company_no: project.client_details.company_no ?? null,
+//         email: project.client_details.email ?? null,
+//         phone: project.client_details.phone ?? null,
+//       };
+//     }
+
+//     return {
+//       sr_no: (page - 1) * limit + index + 1,
+//       ...project,
+//       total_hours: hoursMap[project._id.toString()] ?? 0, // ✅ ONLY NUMBER
+//       client_details: formattedClientDetails,
+//     };
+//   });
+
+//   // ================= RESPONSE =================
+//   return sendSuccess(
+//     res,
+//     "Projects fetched successfully",
+//     {
+//       total: totalCount,
+//       page,
+//       limit,
+//       totalPage,
+//       projects: formattedProjects,
+//     },
+//     200,
+//     true,
+//   );
+// });
+
 exports.getAllProjectsController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
 
@@ -160,8 +304,25 @@ exports.getAllProjectsController = catchAsync(async (req, res, next) => {
   const skip = (page - 1) * limit;
 
   // ================= QUERY =================
-  const query = { tenantId, isDelete: false };
+  const query = {
+    tenantId,
+    isDelete: false,
+  };
 
+  if (req.body.clientId) {
+    query.client = req.body.clientId;
+  }
+
+  if (req.body.projectId) {
+    query._id = req.body.projectId;
+  }
+
+  if (req.body.status === "Completed") {
+    query.is_complete = true;
+  }
+  if (req.body.status === "Active") {
+    query.is_complete = false;
+  }
   const totalCount = await projectMode.countDocuments(query);
 
   if (totalCount === 0) {
