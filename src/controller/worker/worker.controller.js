@@ -192,7 +192,7 @@ exports.addWorker = catchAsync(async (req, res, next) => {
 
   // Ensure ObjectId array
   worker_position = worker_position.map(
-    (id) => new mongoose.Types.ObjectId(id)
+    (id) => new mongoose.Types.ObjectId(id),
   );
   // ================= PARSE personal_information =================
   let personalInformation = req.body.personal_information;
@@ -255,7 +255,7 @@ exports.addWorker = catchAsync(async (req, res, next) => {
     folder.files.map((fileUrl) => ({
       folderName: folder.folderName,
       file: fileUrl,
-    }))
+    })),
   );
 
   // ================= FINAL PAYLOAD =================
@@ -299,7 +299,7 @@ exports.addWorker = catchAsync(async (req, res, next) => {
       tenant: tenantId,
       role: "worker",
     },
-    process.env.WORKER_KEY
+    process.env.WORKER_KEY,
   );
   // ================= DASHBOARD LINK =================
   worker.dashboardUrl = `http://localhost:3000/worker?w_id=${worker._id}&tkn=${worker_token}`;
@@ -347,7 +347,7 @@ exports.getSingleWorkerController = catchAsync(async (req, res, next) => {
          -isSign
          -urlAdminExpireAt
          -updatedAt
-         -__v`
+         -__v`,
       )
       .lean(),
 
@@ -384,27 +384,28 @@ exports.getSingleWorkerController = catchAsync(async (req, res, next) => {
     lastHoliday =
       holidayData
         .filter(
-          (h) => h.duration?.endDate && new Date(h.duration.endDate) < today
+          (h) => h.duration?.endDate && new Date(h.duration.endDate) < today,
         )
         .sort(
-          (a, b) => new Date(b.duration.endDate) - new Date(a.duration.endDate)
+          (a, b) => new Date(b.duration.endDate) - new Date(a.duration.endDate),
         )[0] || null;
 
     nextHoliday =
       holidayData
         .filter(
-          (h) => h.duration?.startDate && new Date(h.duration.startDate) > today
+          (h) =>
+            h.duration?.startDate && new Date(h.duration.startDate) > today,
         )
         .sort(
           (a, b) =>
-            new Date(a.duration.startDate) - new Date(b.duration.startDate)
+            new Date(a.duration.startDate) - new Date(b.duration.startDate),
         )[0] || null;
   }
 
   const holiday = {
     last_holiday: lastHoliday
       ? `${formatDate(lastHoliday.duration.endDate)} (${daysAgo(
-          lastHoliday.duration.endDate
+          lastHoliday.duration.endDate,
         )} days ago)`
       : null,
     next_holiday: nextHoliday
@@ -419,14 +420,14 @@ exports.getSingleWorkerController = catchAsync(async (req, res, next) => {
   if (sicknessData?.length) {
     totalSickDays = sicknessData.reduce(
       (sum, s) => sum + (s.duration?.totalDays || 0),
-      0
+      0,
     );
 
     lastSickness =
       sicknessData
         .filter((s) => s.duration?.endDate)
         .sort(
-          (a, b) => new Date(b.duration.endDate) - new Date(a.duration.endDate)
+          (a, b) => new Date(b.duration.endDate) - new Date(a.duration.endDate),
         )[0] || null;
   }
 
@@ -438,7 +439,7 @@ exports.getSingleWorkerController = catchAsync(async (req, res, next) => {
   const sickness = {
     last_sickness_day: lastSickness
       ? `${formatDate(lastSickness.duration.endDate)} (${daysAgo(
-          lastSickness.duration.endDate
+          lastSickness.duration.endDate,
         )} days ago)`
       : null,
     total_sick_days: totalSickDays,
@@ -535,7 +536,7 @@ exports.getSingleWorkerController = catchAsync(async (req, res, next) => {
 
   // ================= AGE =================
   worker.personal_information.age = calculateAge(
-    worker.personal_information.date_of_birth
+    worker.personal_information.date_of_birth,
   );
 
   delete worker.worker_holiday;
@@ -557,7 +558,7 @@ exports.getSingleWorkerController = catchAsync(async (req, res, next) => {
       },
     ],
     200,
-    true
+    true,
   );
 });
 
@@ -841,7 +842,7 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
   const updatedWorker = await workerModel.findOneAndUpdate(
     { tenantId, _id: w_id },
     updateQuery,
-    { new: true, runValidators: true }
+    { new: true, runValidators: true },
   );
 
   return sendSuccess(
@@ -849,7 +850,7 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
     "Worker updated successfully",
     updatedWorker,
     200,
-    true
+    true,
   );
 });
 
@@ -875,7 +876,7 @@ exports.deleteWorkerController = catchAsync(async (req, res, next) => {
     { tenantId: tenantId, _id: w },
     {
       $set: { isDelete: true, isActive: false },
-    }
+    },
   );
   if (isWorkerExist === null || isWorkerExist.length === 0) {
     return next(new AppError("Worker Not Found", 400));
@@ -908,7 +909,7 @@ exports.multipleDeleteWorkerController = catchAsync(async (req, res, next) => {
   }
   const del = await workerModel.updateMany(
     { tenantId: tenantId, _id: { $in: w_id } },
-    { $set: { isDelete: true, isActive: false } }
+    { $set: { isDelete: true, isActive: false } },
   );
   if (!del || del.length === 0) {
     return next(new AppError("failed to delete,  try again"));
@@ -918,6 +919,101 @@ exports.multipleDeleteWorkerController = catchAsync(async (req, res, next) => {
 
 // <-------- get all worker list except deleted workers ------------->
 
+// exports.getAllWorkerController = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid Tenant-id", 400));
+//   }
+
+//   // ================= PAGINATION =================
+//   const page = parseInt(req.query.page, 10) || 1;
+//   const limit = parseInt(req.query.limit, 10) || 5;
+//   const skip = (page - 1) * limit;
+
+//   // ================= QUERY =================
+//   const query = {
+//     tenantId: tenantId,
+//     isDelete: { $ne: true },
+//     isActive: { $ne: false },
+//   };
+
+//   const totalCount = await workerModel.countDocuments(query);
+
+//   if (totalCount === 0) {
+//     return sendSuccess(res, "no data found", [], 200, true);
+//   }
+
+//   const totalPage = Math.ceil(totalCount / limit);
+
+//   // 🔥 NEW CONDITION: page > totalPage
+//   if (page > totalPage) {
+//     return sendSuccess(
+//       res,
+//       "No page found",
+//       {
+//         total: totalCount,
+//         page,
+//         limit,
+//         totalPage,
+//         worker: [],
+//       },
+//       200,
+//       true
+//     );
+//   }
+
+//   const workerList = await workerModel
+//     .find(query)
+//     .sort({ createdAt: -1 })
+//     .skip(skip)
+//     .limit(limit)
+//     .populate([
+//       {
+//         path: "project.projectId",
+//         select: "_id project_details",
+//       },
+//       {
+//         path: "worker_position",
+//         select: "_id position",
+//         match: { isDelete: false }, // safety
+//       },
+//     ])
+//     .lean();
+
+//   // ================= MODIFY ADMIN VISIBILITY =================
+//   const updatedList = workerList.map((worker) => {
+//     const isExpired =
+//       worker.urlAdminExpireAt && Date.now() > worker.urlAdminExpireAt;
+
+//     return {
+//       ...worker,
+//       project: worker.project.map((p) => ({
+//         _id: p._id,
+//         projectId: p.projectId?._id || null,
+//         project_name: p.projectId?.project_details?.project_name || null,
+//       })),
+//       dashboardUrl:
+//         !isExpired && worker.urlVisibleToAdmin ? worker.dashboardUrl : null,
+//       urlVisibleToAdmin: !isExpired && worker.urlVisibleToAdmin,
+//     };
+//   });
+
+//   // ================= RESPONSE =================
+//   return sendSuccess(
+//     res,
+//     "data found",
+//     {
+//       total: totalCount,
+//       page,
+//       limit,
+//       totalPage,
+//       worker: updatedList,
+//     },
+//     200,
+//     true
+//   );
+// });
 exports.getAllWorkerController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
 
@@ -930,22 +1026,64 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
   const limit = parseInt(req.query.limit, 10) || 5;
   const skip = (page - 1) * limit;
 
-  // ================= QUERY =================
+  const {
+    workerIds = [],
+    projectIds = [],
+    status = [],
+    workerPositionIds = [],
+  } = req.body;
+
+  // ================= BASE QUERY =================
   const query = {
-    tenantId: tenantId,
+    tenantId,
     isDelete: { $ne: true },
     isActive: { $ne: false },
   };
 
+  // ================= FILTERS =================
+
+  // Worker (multiple)
+  if (Array.isArray(workerIds) && workerIds.length > 0) {
+    query._id = { $in: workerIds };
+  }
+
+  // Status (multiple)
+  if (Array.isArray(status) && status.length > 0) {
+    query.status = { $in: status };
+  }
+
+  // Worker Position (multiple)
+  if (Array.isArray(workerPositionIds) && workerPositionIds.length > 0) {
+    query.worker_position = { $in: workerPositionIds };
+  }
+
+  // Project filter (nested array inside worker)
+  if (Array.isArray(projectIds) && projectIds.length > 0) {
+    query["project.projectId"] = { $in: projectIds };
+  }
+
+  // ================= COUNT =================
   const totalCount = await workerModel.countDocuments(query);
 
+  // 🔥 VERY IMPORTANT: UI SAFE RESPONSE
   if (totalCount === 0) {
-    return sendSuccess(res, "no data found", [], 200, true);
+    return sendSuccess(
+      res,
+      "no data found",
+      {
+        total: 0,
+        page,
+        limit,
+        totalPage: 0,
+        worker: [],
+      },
+      200,
+      true,
+    );
   }
 
   const totalPage = Math.ceil(totalCount / limit);
 
-  // 🔥 NEW CONDITION: page > totalPage
   if (page > totalPage) {
     return sendSuccess(
       res,
@@ -958,10 +1096,11 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
         worker: [],
       },
       200,
-      true
+      true,
     );
   }
 
+  // ================= FETCH DATA =================
   const workerList = await workerModel
     .find(query)
     .sort({ createdAt: -1 })
@@ -975,23 +1114,25 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
       {
         path: "worker_position",
         select: "_id position",
-        match: { isDelete: false }, // safety
+        match: { isDelete: false },
       },
     ])
     .lean();
 
-  // ================= MODIFY ADMIN VISIBILITY =================
+  // ================= FORMAT RESPONSE =================
   const updatedList = workerList.map((worker) => {
     const isExpired =
       worker.urlAdminExpireAt && Date.now() > worker.urlAdminExpireAt;
 
     return {
       ...worker,
-      project: worker.project.map((p) => ({
-        _id: p._id,
-        projectId: p.projectId?._id || null,
-        project_name: p.projectId?.project_details?.project_name || null,
-      })),
+      project: Array.isArray(worker.project)
+        ? worker.project.map((p) => ({
+            _id: p._id,
+            projectId: p.projectId?._id || null,
+            project_name: p.projectId?.project_details?.project_name || null,
+          }))
+        : [],
       dashboardUrl:
         !isExpired && worker.urlVisibleToAdmin ? worker.dashboardUrl : null,
       urlVisibleToAdmin: !isExpired && worker.urlVisibleToAdmin,
@@ -1010,7 +1151,7 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
       worker: updatedList,
     },
     200,
-    true
+    true,
   );
 });
 
@@ -1034,7 +1175,7 @@ exports.makeInActiveWorker = catchAsync(async (req, res, next) => {
     { tenantId: tenantId, _id: w_id },
     {
       $set: { isActive: false },
-    }
+    },
   );
   if (!isWorkerExist || isWorkerExist.length === 0) {
     return next(new AppError("worker not found", 400));
@@ -1102,10 +1243,10 @@ exports.getAllProjectsToWorkerAddController = catchAsync(
       result.push({
         projectName: val.project_details.project_name,
         _id: val._id,
-      })
+      }),
     );
     return sendSuccess(res, "Projects fetched successfully", result, 200, true);
-  }
+  },
 );
 
 // <----------- search worker end ------------>
@@ -1141,7 +1282,7 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
 
   if (!range || !range.startDate || !range.endDate || !reason) {
     return next(
-      new AppError("startDate, endDate and reason are required", 400)
+      new AppError("startDate, endDate and reason are required", 400),
     );
   }
 
@@ -1203,7 +1344,7 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
     "Leave request submitted successfully",
     leaveRequest,
     201,
-    true
+    true,
   );
 });
 
@@ -1273,7 +1414,7 @@ exports.workerSignature = catchAsync(async (req, res, next) => {
   }
   if (isWorker.isDelete) {
     return next(
-      new AppError("cannot upload singature of deleleted worker", 400)
+      new AppError("cannot upload singature of deleleted worker", 400),
     );
   }
   if (isWorker.isActive === false) {
@@ -1312,7 +1453,7 @@ exports.getAllPositions = catchAsync(async (req, res, next) => {
   }
   const positions = [];
   result.forEach((e, pos) =>
-    positions.push({ position: e.position, _id: e._id })
+    positions.push({ position: e.position, _id: e._id }),
   );
   return sendSuccess(res, "success", positions, 200, true);
 });
