@@ -54,7 +54,7 @@ exports.addClient = catchAsync(async (req, res, next) => {
 
   const urlToken = await jwt.sign(
     { client_id: client._id, role: "client", tenantId },
-    process.env.CLIENT_KEY
+    process.env.CLIENT_KEY,
   );
 
   client.client_url = `http://localhost:3000/client?cli=${urlToken}`;
@@ -75,20 +75,26 @@ exports.getAllClientController = catchAsync(async (req, res, next) => {
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant-Id", 400));
   }
-
+  const query = {
+    tenantId,
+    isDelete: false,
+  };
+  if (req.query.filter) {
+    if (!mongoose.Types.ObjectId.isValid(req.query.filter)) {
+      return next(new AppError("Invalid client"));
+    }
+    query._id = req.query.filter;
+  }
   const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
   const limit =
     Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 10;
 
   const skip = (page - 1) * limit;
 
-  const totalClients = await clientModel.countDocuments({
-    tenantId,
-    isDelete: false,
-  });
+  const totalClients = await clientModel.countDocuments(query);
 
   const clientList = await clientModel
-    .find({ tenantId, isDelete: false })
+    .find(query)
     .skip(skip)
     .limit(limit)
     .sort({ createdAt: -1 })
@@ -105,7 +111,7 @@ exports.getAllClientController = catchAsync(async (req, res, next) => {
       clients: clientList,
     },
     200,
-    true
+    true,
   );
 });
 
@@ -213,7 +219,7 @@ exports.updateClientController = catchAsync(async (req, res, next) => {
   // 🔹 Update client
   const updateResult = await clientModel.updateOne(
     { _id: client },
-    { $set: cleanBody }
+    { $set: cleanBody },
   );
 
   if (updateResult.modifiedCount === 0) {
@@ -279,7 +285,7 @@ exports.deleteMultipleClients = catchAsync(async (req, res, next) => {
   }
   const result = await clientModel.updateMany(
     { tenantId, _id: { $in: c_id } },
-    { $set: { isDelete: true } }
+    { $set: { isDelete: true } },
   );
   if (!result || result.length === 0) {
     return next(new AppError("Failed to delete clients", 400));
@@ -370,7 +376,7 @@ exports.clientSignature = catchAsync(async (req, res, next) => {
       isSignatured: true,
       permission: permission,
     },
-    { new: true }
+    { new: true },
   );
 
   if (!client) {
@@ -572,7 +578,7 @@ exports.generateReport = catchAsync(async (req, res, next) => {
   // 4️⃣ Create worker-wise daily report (SAME AS BEFORE)
   const workerReports = workers.map((worker) => {
     const workerHours = hoursData.filter(
-      (h) => h.workerId.toString() === worker._id.toString()
+      (h) => h.workerId.toString() === worker._id.toString(),
     );
 
     const dailyHours = [];
@@ -616,7 +622,7 @@ exports.generateReport = catchAsync(async (req, res, next) => {
       }
 
       let monthWorker = monthWiseData[monthKey].workers.find(
-        (w) => w.name === worker.name
+        (w) => w.name === worker.name,
       );
 
       if (!monthWorker) {
@@ -649,7 +655,7 @@ exports.generateReport = catchAsync(async (req, res, next) => {
     res,
     "Month-wise worker report generated successfully",
     monthWiseData,
-    200
+    200,
   );
 });
 
@@ -667,7 +673,7 @@ exports.downloadReportExcel = catchAsync(async (req, res, next) => {
           json: (payload) => resolve(payload),
         }),
       },
-      reject
+      reject,
     );
   });
 
@@ -809,11 +815,11 @@ exports.downloadReportExcel = catchAsync(async (req, res, next) => {
   ======================= */
   res.setHeader(
     "Content-Type",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
   res.setHeader(
     "Content-Disposition",
-    "attachment; filename=project_hours_report.xlsx"
+    "attachment; filename=project_hours_report.xlsx",
   );
 
   await workbook.xlsx.write(res);
@@ -906,7 +912,7 @@ const convertIntoWeek = (date) => {
   const joiningDate = new Date(
     Number(date.split("-")[0]),
     Number(date.split("-")[1]) - 1,
-    Number(date.split("-")[2])
+    Number(date.split("-")[2]),
   );
   const currentMonth = new Date();
 
@@ -1001,7 +1007,7 @@ exports.getClientNamesForFilter = catchAsync(async (req, res, next) => {
   }
   const result = [];
   clients.forEach((e, val) =>
-    result.push({ name: e.client_details.client_name, _id: e._id })
+    result.push({ name: e.client_details.client_name, _id: e._id }),
   );
   return sendSuccess(res, "Client Fetch", result, 200, true);
 });
