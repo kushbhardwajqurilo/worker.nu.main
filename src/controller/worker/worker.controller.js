@@ -18,7 +18,9 @@ const uploadSignature = require("../../middleware/signature.middleware");
 const projectMode = require("../../models/projectMode");
 const hoursModel = require("../../models/hoursModel");
 const { calculateAge, formatDateUTC } = require("../../utils/calcuateAge");
-
+const { cloudinary } = require("../../confing/cloudinaryConfig");
+const fs = require("fs");
+const extractDate = require("../../utils/extracrDate");
 // ----------------------------------------- ADMIN DASHBOARD API'S -----------------------------------------------
 
 // <---------- Add Worker Start Here ------------>
@@ -302,7 +304,7 @@ exports.addWorker = catchAsync(async (req, res, next) => {
     process.env.WORKER_KEY,
   );
   // ================= DASHBOARD LINK =================
-  worker.dashboardUrl = `http://localhost:3000/worker?w_id=${worker._id}&tkn=${worker_token}`;
+  worker.dashboardUrl = `https://ql3cm80q-3000.inc1.devtunnels.ms/worker?tkn=${worker_token}`;
   worker.urlVisibleToAdmin = true;
   worker.urlAdminExpireAt = Date.now() + 24 * 60 * 60 * 1000;
 
@@ -1026,12 +1028,12 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
   const limit = parseInt(req.query.limit, 10) || 5;
   const skip = (page - 1) * limit;
 
-  const {
-    workerIds = [],
-    projectIds = [],
-    status = [],
-    workerPositionIds = [],
-  } = req.body;
+  // const {
+  //   workerIds = [],
+  //   projectIds = [],
+  //   status = [],
+  //   workerPositionIds = [],
+  // } = req.body;
 
   // ================= BASE QUERY =================
   const query = {
@@ -1042,25 +1044,25 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
 
   // ================= FILTERS =================
 
-  // Worker (multiple)
-  if (Array.isArray(workerIds) && workerIds.length > 0) {
-    query._id = { $in: workerIds };
-  }
+  // // Worker (multiple)
+  // if (Array.isArray(workerIds) && workerIds.length > 0) {
+  //   query._id = { $in: workerIds };
+  // }
 
-  // Status (multiple)
-  if (Array.isArray(status) && status.length > 0) {
-    query.status = { $in: status };
-  }
+  // // Status (multiple)
+  // if (Array.isArray(status) && status.length > 0) {
+  //   query.status = { $in: status };
+  // }
 
-  // Worker Position (multiple)
-  if (Array.isArray(workerPositionIds) && workerPositionIds.length > 0) {
-    query.worker_position = { $in: workerPositionIds };
-  }
+  // // Worker Position (multiple)
+  // if (Array.isArray(workerPositionIds) && workerPositionIds.length > 0) {
+  //   query.worker_position = { $in: workerPositionIds };
+  // }
 
-  // Project filter (nested array inside worker)
-  if (Array.isArray(projectIds) && projectIds.length > 0) {
-    query["project.projectId"] = { $in: projectIds };
-  }
+  // // Project filter (nested array inside worker)
+  // if (Array.isArray(projectIds) && projectIds.length > 0) {
+  //   query["project.projectId"] = { $in: projectIds };
+  // }
 
   // ================= COUNT =================
   const totalCount = await workerModel.countDocuments(query);
@@ -1259,20 +1261,28 @@ exports.getAllProjectsToWorkerAddController = catchAsync(
 exports.requestLeave = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
   const { w_id } = req.query;
+  const id = req.worker_id;
+
   const { range, reason, leaveType } = req.body;
 
   /* ---------- TENANT VALIDATION ---------- */
+  if (!tenantId) {
+    return next(new AppError("tenant-id missing", 400));
+  }
+
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid tenant-id", 400));
   }
 
-  /* ---------- WORKER ID VALIDATION ---------- */
-  if (!w_id) {
-    return next(new AppError("w_id missing", 400));
+  /* ---------- WORKER ID RESOLUTION ---------- */
+  const worker_id = w_id ? id : w_id;
+
+  if (!worker_id) {
+    return next(new AppError("worker_id missing", 400));
   }
 
-  if (!mongoose.Types.ObjectId.isValid(w_id)) {
-    return next(new AppError("Invalid w_id", 400));
+  if (!mongoose.Types.ObjectId.isValid(worker_id)) {
+    return next(new AppError("Invalid worker_id", 400));
   }
 
   /* ---------- BODY VALIDATION ---------- */
@@ -1289,6 +1299,10 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
   const startDate = new Date(range.startDate);
   const endDate = new Date(range.endDate);
 
+  if (isNaN(startDate) || isNaN(endDate)) {
+    return next(new AppError("Invalid date format", 400));
+  }
+
   if (startDate > endDate) {
     return next(new AppError("startDate cannot be greater than endDate", 400));
   }
@@ -1296,15 +1310,13 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
   /* ---------- WORKER CHECK ---------- */
   const isWorker = await workerModel.findOne({
     tenantId,
-    _id: w_id,
+    _id: worker_id,
+    isDelete: false,
+    isActive: true,
   });
 
   if (!isWorker) {
-    return next(new AppError("Worker not found", 400));
-  }
-
-  if (isWorker.isDelete || !isWorker.isActive) {
-    return next(new AppError("Worker not active", 400));
+    return next(new AppError("Worker not found or inactive", 400));
   }
 
   /* ---------- TOTAL DAYS ---------- */
@@ -1314,7 +1326,7 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
   /* ---------- COMMON PAYLOAD ---------- */
   const payload = {
     tenantId,
-    workerId: w_id,
+    workerId: worker_id,
     duration: {
       startDate,
       endDate,
@@ -1400,40 +1412,52 @@ exports.getSickness = catchAsync(async (req, res, next) => {
 
 // worker singature
 exports.workerSignature = catchAsync(async (req, res, next) => {
-  const { tenantId } = req;
+  const { tenantId, worker_id } = req;
+
+  /* ========== VALIDATIONS ========== */
+
   if (!isValidCustomUUID(tenantId)) {
-    return next(new AppError("Invalid Tenatn-id", 400));
+    return next(new AppError("Invalid Tenant-id", 400));
   }
-  const { w_id } = req.query;
-  if (!w_id) {
-    return next(new AppError("Worker id  missing", 400));
+
+  if (!worker_id) {
+    return next(new AppError("Worker id missing", 400));
   }
-  const isWorker = await workerModel.findOne({ tenantId, _id: w_id });
-  if (!isWorker) {
-    return next(new AppError("worker not found", 400));
-  }
-  if (isWorker.isDelete) {
-    return next(
-      new AppError("cannot upload singature of deleleted worker", 400),
-    );
-  }
-  if (isWorker.isActive === false) {
-    return next(new AppError("worker is not active", 400));
-  }
-  await uploadSignature(req, res, async (err) => {
-    if (err) {
-      if (err.code === "LIMIT_FILE_SIZE") {
-        return next(new AppError("file size to large", 400));
-      }
-      return next(err);
-    }
-    if (!req.file) {
-      return next(new AppError("signature missing", 400));
-    }
-    const signatureUrl = req.file.path;
-    isWorker.signature = signatureUrl;
-    isWorker.isSign = true;
+
+  const worker = await workerModel.findOne({
+    _id: worker_id,
+    tenantId,
+    isDelete: false,
   });
+
+  if (!worker) {
+    return next(new AppError("Worker not found", 404));
+  }
+
+  if (!worker.isActive) {
+    return next(new AppError("Worker is not active", 400));
+  }
+
+  /* ========== FILE CHECK ========== */
+
+  if (!req.file) {
+    return next(new AppError("Signature missing", 400));
+  }
+
+  /* ========== UPDATE WORKER ========== */
+  const upload = await cloudinary.uploader.upload(req.file.path, {
+    folder: "worker_singature",
+  });
+  if (!upload) {
+    fs.unlinkSync(req.file.path);
+  }
+  worker.signature = upload.secure_url; // secure_url
+  // worker.signature_public_id = req.file.filename; // public_id
+  worker.isSign = true;
+  fs.unlinkSync(req.file.path);
+  await worker.save(); // ✅ MUST
+
+  return sendSuccess(res, "Signature uploaded successfully", {}, 200, true);
 });
 
 exports.getAllPositions = catchAsync(async (req, res, next) => {
@@ -1456,4 +1480,354 @@ exports.getAllPositions = catchAsync(async (req, res, next) => {
     positions.push({ position: e.position, _id: e._id }),
   );
   return sendSuccess(res, "success", positions, 200, true);
+});
+
+// get assinged project to
+exports.getWorkerAssingedProjects = catchAsync(async (req, res, next) => {
+  const { tenantId, worker_id } = req;
+
+  if (!tenantId) {
+    return next(new AppError("Tenant missing", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+
+  if (!worker_id) {
+    return next(new AppError("worker id missing", 400));
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(worker_id)) {
+    return next(new AppError("Invalid worker id", 400));
+  }
+
+  const data = await workerModel
+    .find({ tenantId, _id: worker_id })
+    .populate({
+      path: "project.projectId",
+      select:
+        "_id project_details.project_name project_details.project_location_address",
+    })
+    .lean();
+
+  const filteredData = [];
+
+  data.forEach((worker) => {
+    worker.project.forEach((proj) => {
+      if (proj.projectId) {
+        filteredData.push({
+          _id: proj.projectId._id,
+          s_no: filteredData.length + 1,
+          project_name: proj.projectId.project_details.project_name,
+          address: proj.projectId.project_details.project_location_address,
+        });
+      }
+    });
+  });
+
+  return sendSuccess(res, "Success", filteredData, 200, true);
+});
+
+// get single project some details for worker
+
+exports.getSingleProjectDetailsForWorker = catchAsync(
+  async (req, res, next) => {
+    const { tenantId, worker_id } = req;
+    const { p_id } = req.params;
+    console.log(worker_id);
+    if (!tenantId) {
+      return next(new AppError("Tenant missing", 400));
+    }
+    if (!isValidCustomUUID(tenantId)) {
+      return next(new AppError("Invalid Tenant-id", 400));
+    }
+    if (!worker_id) {
+      return next(new AppError("worker id missing", 400));
+    }
+    if (!mongoose.Types.ObjectId.isValid(worker_id)) {
+      return next(new AppError("Invalid worker id", 400));
+    }
+    const data = await projectMode
+      .findOne({
+        tenantId,
+        _id: p_id,
+      })
+      .lean();
+    const filteredData = {
+      _id: data._id,
+      project_name: data.project_details?.project_name,
+      address: data.project_details.project_location_address,
+      phone: data.client_details.phone,
+      description: data.project_details.project_description,
+      position: data.project_details_for_workers.contact_information.position,
+      phone_code:
+        data.project_details_for_workers.contact_information.phone_code,
+      phone: data.project_details_for_workers.contact_information.phone_number,
+      project_files: {
+        files: data.project_details_for_workers.files,
+        folder: data.project_details_for_workers.folders,
+      },
+    };
+    return sendSuccess(res, "Success", filteredData, 200, true);
+  },
+);
+
+exports.isSignWorker = catchAsync(async (req, res, next) => {
+  const { tenantId, worker_id } = req;
+  if (!tenantId) {
+    return next(new AppError("Tenant missing", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+  if (!worker_id) {
+    return next(new AppError("worker id missing", 400));
+  }
+  if (!mongoose.Types.ObjectId.isValid(worker_id)) {
+    return next(new AppError("Invalid worker id", 400));
+  }
+  const worker = await workerModel
+    .findOne({ tenantId, _id: worker_id })
+    .select("isSign")
+    .lean();
+  if (!worker) {
+    return nedt(new AppError("Invaolid Worker", 400));
+  }
+  return sendSuccess(res, "success", worker, 200, true);
+});
+
+exports.getWorkerHolidayDetails = catchAsync(async (req, res, next) => {
+  const { tenantId, worker_id } = req;
+  const { leaveType } = req.params;
+  if (!tenantId) {
+    return next(new AppError("Tenant missing", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+  if (!worker_id) {
+    return next(new AppError("worker id missing", 400));
+  }
+  if (!mongoose.Types.ObjectId.isValid(worker_id)) {
+    return next(new AppError("Invalid worker id", 400));
+  }
+  const filter = {
+    tenantId,
+    _id: worker_id,
+  };
+  const filteredData = {};
+  const data = await workerModel.findOne(filter).select("worker_holiday");
+  if (leaveType === "holiday") {
+    filteredData.total = data.worker_holiday.holidays_per_month;
+    filteredData.taken = data.worker_holiday.holidays_taken;
+    filteredData.remaining = data.worker_holiday.remaining_holidays;
+  } else if (leaveType === "sickness") {
+    filteredData.total = data.worker_holiday.sickness_per_month;
+    filteredData.taken = data.worker_holiday.sickness_taken;
+    filteredData.remaining = data.worker_holiday.remaining_sickness;
+  } else {
+    return next(new AppError("Invalid Leave Type", 400));
+  }
+  return sendSuccess(res, "success", [filteredData], 200, true);
+});
+
+// get all hours of worker
+exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
+  const { tenantId, worker_id } = req;
+
+  if (!tenantId) {
+    return next(new AppError("Tenant missing", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+  if (!worker_id) {
+    return next(new AppError("Worker id missing", 400));
+  }
+  if (!mongoose.Types.ObjectId.isValid(worker_id)) {
+    return next(new AppError("Invalid worker id", 400));
+  }
+
+  /* ---------- PAGINATION ---------- */
+  const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
+  const limit =
+    Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 10;
+  const skip = (page - 1) * limit;
+
+  /* ---------- QUERY ---------- */
+  const query = {
+    tenantId,
+    workerId: worker_id,
+  };
+
+  /* ---------- TOTAL COUNT ---------- */
+  const totalHours = await hoursModel.countDocuments(query);
+
+  /* ---------- DATA ---------- */
+  const hours = await hoursModel
+    .find(query)
+    .populate({
+      path: "project.projectId",
+      select: "project_details.project_name daily_work_hour",
+    })
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  if (!hours.length) {
+    return sendSuccess(
+      res,
+      "No hours found",
+      {
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+        hours: [],
+      },
+      200,
+      true,
+    );
+  }
+
+  /* ---------- HELPER ---------- */
+  function calculateTotalHours(start, end) {
+    const startTime = start.hours * 60 + start.minutes;
+    const endTime = end.hours * 60 + end.minutes;
+    const diffMinutes = endTime - startTime;
+    return `${Math.floor(diffMinutes / 60)}h:${diffMinutes % 60}m`;
+  }
+
+  /* ---------- RESPONSE DATA ---------- */
+  const data = hours.map((val) => ({
+    date: val.createdAt,
+    worker_hours: {
+      submitted_hours: `${extractDate(val.createdAt)} ${
+        val.start_working_hours.hours
+      }h:${val.start_working_hours.minutes}m to ${extractDate(
+        val.createdAt,
+      )} ${val.finish_hours.hours}h:${val.finish_hours.minutes}m`,
+      working_hours: `${val.total_hours}h`,
+      total_working_hour: calculateTotalHours(
+        val.project.projectId.daily_work_hour,
+        val.project.projectId.daily_work_hour,
+      ),
+    },
+    break: val.break_time || "",
+    project: {
+      project_name: val.project.projectId.project_details.project_name,
+      comment: val.comments,
+    },
+  }));
+
+  /* ---------- FINAL RESPONSE ---------- */
+  return sendSuccess(
+    res,
+    "Hours fetched successfully",
+    {
+      total: totalHours,
+      page,
+      limit,
+      totalPages: Math.ceil(totalHours / limit),
+      hours: data,
+    },
+    200,
+    true,
+  );
+});
+
+const getWeekRange = (date) => {
+  const d = new Date(date);
+  const day = d.getDay() || 7; // Sunday = 7
+
+  const start = new Date(d);
+  start.setDate(d.getDate() - day + 1);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+
+  return { start, end };
+};
+
+exports.LastAndThisWeekTotalHours = catchAsync(async (req, res, next) => {
+  const { tenantId, worker_id } = req;
+
+  /* ---------- VALIDATIONS ---------- */
+  if (!tenantId) {
+    return next(new AppError("Tenant missing", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+
+  if (!worker_id) {
+    return next(new AppError("Worker id missing", 400));
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(worker_id)) {
+    return next(new AppError("Invalid worker id", 400));
+  }
+
+  /* ---------- DATE RANGES ---------- */
+  const now = new Date();
+
+  const thisWeek = getWeekRange(now);
+
+  const lastWeekDate = new Date();
+  lastWeekDate.setDate(lastWeekDate.getDate() - 7);
+  const lastWeek = getWeekRange(lastWeekDate);
+
+  /* ---------- AGGREGATION ---------- */
+  const [thisWeekResult, lastWeekResult] = await Promise.all([
+    hoursModel.aggregate([
+      {
+        $match: {
+          tenantId,
+          workerId: new mongoose.Types.ObjectId(worker_id),
+          createdAt: {
+            $gte: thisWeek.start,
+            $lte: thisWeek.end,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalHours: { $sum: "$total_hours" },
+        },
+      },
+    ]),
+    hoursModel.aggregate([
+      {
+        $match: {
+          tenantId,
+          workerId: new mongoose.Types.ObjectId(worker_id),
+          createdAt: {
+            $gte: lastWeek.start,
+            $lte: lastWeek.end,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalHours: { $sum: "$total_hours" },
+        },
+      },
+    ]),
+  ]);
+
+  /* ---------- RESPONSE ---------- */
+  res.status(200).json({
+    status: true,
+    data: {
+      thisWeekHours: thisWeekResult[0]?.totalHours || 0,
+      lastWeekHours: lastWeekResult[0]?.totalHours || 0,
+    },
+  });
 });

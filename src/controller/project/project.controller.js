@@ -309,20 +309,20 @@ exports.getAllProjectsController = catchAsync(async (req, res, next) => {
     isDelete: false,
   };
 
-  if (req.body.clientId) {
-    query.client = req.body.clientId;
-  }
+  // if (req.body.clientId) {
+  //   query.client = req.body.clientId;
+  // }
 
-  if (req.body.projectId) {
-    query._id = req.body.projectId;
-  }
+  // if (req.body.projectId) {
+  //   query._id = req.body.projectId;
+  // }
 
-  if (req.body.status === "Completed") {
-    query.is_complete = true;
-  }
-  if (req.body.status === "Active") {
-    query.is_complete = false;
-  }
+  // if (req.body.status === "Completed") {
+  //   query.is_complete = true;
+  // }
+  // if (req.body.status === "Active") {
+  //   query.is_complete = false;
+  // }
   const totalCount = await projectMode.countDocuments(query);
 
   if (totalCount === 0) {

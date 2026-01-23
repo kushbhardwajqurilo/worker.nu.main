@@ -20,7 +20,7 @@ const generateAcessToken = (data) => {
       tenant: data.tenant,
     },
     process.env.ACCESS_TOKEN_KEY,
-    { expiresIn: "15m" }
+    { expiresIn: "15m" },
   );
 };
 
@@ -28,7 +28,7 @@ const generateRefreshToken = async (user, expire) => {
   const refreshToken = jwt.sign(
     { id: user.admin_id, role: user.role, tenant: user.tenant },
     process.env.SECRET_KEY,
-    { expiresIn: expire || "15m" }
+    { expiresIn: expire || "15m" },
   );
 
   // 🔥 One user = one document (UPSERT)
@@ -42,7 +42,7 @@ const generateRefreshToken = async (user, expire) => {
       upsert: true, // create if not exists
       new: true,
       setDefaultsOnInsert: true,
-    }
+    },
   );
 
   return refreshToken;
@@ -70,7 +70,6 @@ exports.adminSignup = catchAsync(async (req, res, next) => {
     return next(new AppError("name Required", 400));
   }
   const hashPass = await hashPassword(password);
-  console.log("pss", hashPass);
   const payload = {
     email: email.trim().toLowerCase(),
     tenantId: generateCustomUUID(),
@@ -134,14 +133,14 @@ exports.adminLogin = catchAsync(async (req, res, next) => {
         tenant: isAdmin.tenantId,
         role: "admin",
       },
-      expire
+      expire,
     );
     return sendSuccess(
       res,
       "login successfull",
       { accessToken, refreshToken },
       200,
-      true
+      true,
     );
   } else {
     return next(new AppError("Invalid password", 400));
@@ -170,7 +169,7 @@ exports.refreshToken = catchAsync(async (req, res, next) => {
     const accessToken = jwt.sign(
       { id: payload.id, role: payload.role, tenant: tenantData.tenantId },
       process.env.ACCESS_TOKEN_KEY,
-      { expiresIn: "15m" } // 15 min
+      { expiresIn: "15m" }, // 15 min
     );
 
     const newRefreshToken = await generateRefreshToken(
@@ -178,7 +177,7 @@ exports.refreshToken = catchAsync(async (req, res, next) => {
         admin_id: payload.id,
         role: payload.role,
       },
-      saved.expireIn
+      saved.expireIn,
     );
 
     return sendSuccess(
@@ -189,7 +188,7 @@ exports.refreshToken = catchAsync(async (req, res, next) => {
         refreshToken: newRefreshToken,
       },
       200,
-      true
+      true,
     );
   });
 });

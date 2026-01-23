@@ -6,6 +6,7 @@ const {
 } = require("../../utils/errorHandler");
 const clientModel = require("../../models/clientModel");
 const projectMode = require("../../models/projectMode");
+const { isValidCustomUUID } = require("custom-uuid-generator");
 // <--------- Single client own details  ----------->
 
 exports.getClientInformation = catchAsync(async (req, res, next) => {
@@ -54,3 +55,28 @@ exports.getClientWorkers = catchAsync(async (req, res, next) => {
   const workers = await projectMode.findOne({ tenantId });
 });
 // <----get clients workers end ---------->
+
+// <------ client signatue false true ----------->
+// is sing cliend
+exports.isClientSign = catchAsync(async (req, res, next) => {
+  const { tenantId, client_id } = req;
+  if (!tenantId) {
+    return next(new AppError("Tenant Id missing in headers", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-Id", 400));
+  }
+  if (!client_id) {
+    return next(new AppError("client Id missing in headers", 400));
+  }
+
+  const client = await clientModel.findOne({ _id: client_id, tenantId });
+  const data = {
+    _id: client?._id,
+    isSign: client?.isSignatured,
+  };
+  return sendSuccess(res, "success", data, 200, true);
+});
+
+// client

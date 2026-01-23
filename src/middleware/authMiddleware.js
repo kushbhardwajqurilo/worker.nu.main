@@ -4,7 +4,6 @@ const { catchAsync, AppError } = require("../utils/errorHandler");
 // admin middleware
 const authMiddeware = catchAsync(async (req, res, next) => {
   const authHeader = req.headers.authorization;
-
   if (!authHeader) {
     return next(new AppError("Authorization header missing", 401));
   }
@@ -40,6 +39,7 @@ const authMiddeware = catchAsync(async (req, res, next) => {
 const accessMiddleware = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.role)) {
+      console.log(req.role);
       return next(new AppError(`access denied to ${req.role}`));
     } else next();
   };
@@ -65,8 +65,8 @@ const clientAuthMiddleware = catchAsync(async (req, res, next) => {
     return next(new AppError("Authorizaion Failed", 400));
   }
   req.client_id = clientInfo.client_id;
-  req.tenantId = clientInfo.tenant;
-  req.role = clientInfo.client_id;
+  req.tenantId = clientInfo.tenantId;
+  req.role = clientInfo.role;
   next();
 });
 const workerAuthMiddleware = catchAsync(async (req, res, next) => {
@@ -112,7 +112,29 @@ const workerOrAdminAuthMiddleware = async (req, res, next) => {
 
       // ❌ both failed
       return next(
-        new AppError("Unauthorized: worker or admin token required", 401)
+        new AppError("Unauthorized: worker or admin token required", 401),
+      );
+    });
+  });
+};
+const clientOrAdminAuthMiddleware = async (req, res, next) => {
+  // 🔹 try client auth first
+  clientAuthMiddleware(req, res, (clientErr) => {
+    if (!clientErr) {
+      req.authType = "client";
+      return next();
+    }
+
+    // 🔹 client failed → try admin auth
+    authMiddeware(req, res, (adminErr) => {
+      if (!adminErr) {
+        req.authType = "admin";
+        return next();
+      }
+
+      // ❌ both failed
+      return next(
+        new AppError("Unauthorized: client or admin token required", 401),
       );
     });
   });
@@ -126,4 +148,5 @@ module.exports = {
   clientAuthMiddleware,
   workerAuthMiddleware,
   workerOrAdminAuthMiddleware,
+  clientOrAdminAuthMiddleware,
 };

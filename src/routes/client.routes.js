@@ -13,8 +13,12 @@ const {
   getClientNamesForFilter,
 } = require("../controller/client/client.controller");
 const {
+  isClientSign,
+} = require("../controller/client/clientDashboard.controller");
+const {
   authMiddeware,
   accessMiddleware,
+  clientAuthMiddleware,
 } = require("../middleware/authMiddleware");
 const upload = require("../middleware/cloudinaryMiddleware");
 
@@ -24,43 +28,49 @@ clientRouter.post(
   "/add-client",
   authMiddeware,
   accessMiddleware("admin"),
-  addClient
+  addClient,
 ); // add client by admin route
 clientRouter.get(
   "/get-clients",
   authMiddeware,
   accessMiddleware("admin"),
-  getAllClientController
+  getAllClientController,
 ); // get all client for admin route
 
 clientRouter.get(
   "/get-single-client",
   authMiddeware,
   accessMiddleware("admin", "worker"),
-  getSingleClientController
+  getSingleClientController,
 ); // get single client details route
 
 clientRouter.put(
   "/update-client",
   authMiddeware,
   accessMiddleware("admin"),
-  updateClientController
+  updateClientController,
 ); // update client router
 clientRouter.delete(
   "/delete-client",
   authMiddeware,
   accessMiddleware("admin"),
-  deleteClientController
+  deleteClientController,
 ); // delete client by admin route
 
 clientRouter.delete(
   "/delete-multiple",
   authMiddeware,
   accessMiddleware("admin"),
-  deleteMultipleClients
+  deleteMultipleClients,
 ); // delete multiple client
 
-clientRouter.post("/signature", upload.single("file"), clientSignature);
+clientRouter.post(
+  "/signature",
+  upload.single("signature"),
+  clientAuthMiddleware,
+  accessMiddleware("client"),
+  clientSignature,
+);
 
 // client worker
 clientRouter.get("/client-worker", getClientWorkers);
@@ -71,6 +81,12 @@ clientRouter.get(
   "/get-filter-name",
   authMiddeware,
   accessMiddleware("admin"),
-  getClientNamesForFilter
+  getClientNamesForFilter,
+);
+clientRouter.get(
+  "/client-sign",
+  clientAuthMiddleware,
+  accessMiddleware("client"),
+  isClientSign,
 );
 module.exports = clientRouter;

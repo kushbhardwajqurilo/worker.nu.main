@@ -11,10 +11,14 @@ const {
   getSingleWorkerWeeklyHoursController,
   updateTimeInHours,
   updateHoursCommment,
+  approveHours,
 } = require("../controller/hours/hours.controller");
 const {
   authMiddeware,
   accessMiddleware,
+  workerOrAdminAuthMiddleware,
+  clientOrAdminAuthMiddleware,
+  clientAuthMiddleware,
 } = require("../middleware/authMiddleware");
 
 const hoursRouter = require("express").Router();
@@ -24,10 +28,10 @@ const hoursRouter = require("express").Router();
 /* ---------------- CREATE HOURS (Worker) ---------------- */
 hoursRouter.post(
   "/submit-hours",
-  authMiddeware,
-  accessMiddleware("admin"),
+  workerOrAdminAuthMiddleware,
+  accessMiddleware("admin", "worker"),
   hoursImageUpload.single("file"),
-  createWorkerHours
+  createWorkerHours,
 );
 
 /* ---------------- UPDATE HOURS (Worker/Admin) ---------- */
@@ -40,9 +44,9 @@ hoursRouter.get("/single", getSingleHoursDetailsController);
 /* ---------------- GET ALL HOURS OF WORKER ------------- */
 hoursRouter.get(
   "/worker-all",
-  authMiddeware,
-  accessMiddleware("admin"),
-  getAllHoursOfWorkerController
+  clientOrAdminAuthMiddleware,
+  accessMiddleware("admin", "client"),
+  getAllHoursOfWorkerController,
 );
 // example: /hours/worker-all?w_id=12345
 
@@ -60,25 +64,32 @@ Body: { workerId, weekNumber }
 */
 hoursRouter.patch("/approve-week", approveWeek);
 
+// client hours approve
+hoursRouter.patch(
+  "approve-hours",
+  clientAuthMiddleware,
+  accessMiddleware("client"),
+  approveHours,
+);
 // dashboard hours
 hoursRouter.get("/get-hours", dashboardHours);
 
 hoursRouter.get(
   "/single-worker-hour",
-  authMiddeware,
-  accessMiddleware("admin"),
-  getSingleWorkerWeeklyHoursController
+  clientOrAdminAuthMiddleware,
+  accessMiddleware("admin", "client"),
+  getSingleWorkerWeeklyHoursController,
 );
 hoursRouter.put(
   "/update-hours_timing",
   authMiddeware,
   accessMiddleware("admin"),
-  updateTimeInHours
+  updateTimeInHours,
 );
 hoursRouter.patch(
   "/update-comments",
   authMiddeware,
   accessMiddleware("admin"),
-  updateHoursCommment
+  updateHoursCommment,
 );
 module.exports = hoursRouter;

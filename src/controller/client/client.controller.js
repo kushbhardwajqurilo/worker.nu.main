@@ -57,7 +57,7 @@ exports.addClient = catchAsync(async (req, res, next) => {
     process.env.CLIENT_KEY,
   );
 
-  client.client_url = `http://localhost:3000/client?cli=${urlToken}`;
+  client.client_url = `http://localhost:3000/client?tkn=${urlToken}`;
   await client.save();
   sendSuccess(res, "Client add successfully", {}, 200, true);
 });
@@ -349,20 +349,16 @@ exports.searchClientController = catchAsync(async (req, res, next) => {
 // <------- client signature upload --------->
 
 exports.clientSignature = catchAsync(async (req, res, next) => {
-  const clientId = req.query.cli;
-  const { signature, permission } = req.body;
-  if (!signature) {
-    return next(new AppError("Signature image missing", 400));
-  }
+  const clientId = req.client_id;
+  const { file } = req;
 
   if (!clientId) {
     return next(new AppError("Client ID is required", 400));
   }
 
   // Upload base64 signature to Cloudinary
-  const uploadRes = await cloudinary.uploader.upload(signature, {
+  const uploadRes = await cloudinary.uploader.upload(file.path, {
     folder: "client_signatures",
-    format: "png",
   });
   if (!uploadRes || !uploadRes.secure_url) {
     return next(new AppError("Failed to upload signature", 500));
@@ -374,7 +370,7 @@ exports.clientSignature = catchAsync(async (req, res, next) => {
     {
       clientSignature: uploadRes.secure_url,
       isSignatured: true,
-      permission: permission,
+      // permission: permission,
     },
     { new: true },
   );
@@ -384,10 +380,8 @@ exports.clientSignature = catchAsync(async (req, res, next) => {
   }
 
   return res.status(200).json({
-    success: true,
+    status: true,
     message: "Signature uploaded successfully",
-    signature_url: uploadRes.secure_url,
-    client,
   });
 });
 

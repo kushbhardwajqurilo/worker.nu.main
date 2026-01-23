@@ -1,28 +1,20 @@
 const multer = require("multer");
-const { CloudinaryStorage } = require("multer-storage-cloudinary");
-const cloudinary = require("../confing/cloudinaryConfig");
-const AppError = require("../utils/errorHandler");
+const path = require("path");
 
-const signatureStorage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: "signatures",
-    resource_type: "image",
-    public_id: (req, file) => `signature-${Date.now()}-${file.originalname}`,
+// storage config
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath =
+      process.env.VERCEL_ENV === "production"
+        ? "/tmp"
+        : path.join(__dirname, "../../public/upload"); // ✅ go 2 levels up
+
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + "-" + file.originalname);
   },
 });
-
-const uploadSignature = multer({
-  storage: signatureStorage,
-  limits: {
-    fileSize: 10 * 1024 * 1024,
-  },
-  fileFilter: (req, file, cb) => {
-    if (!file.mimetype.startsWith("image/")) {
-      return cb(new AppError("Only image files allowed", 400));
-    }
-    cb(null, true);
-  },
-}).single("signature");
-
-module.exports = uploadSignature;
+const ImageUpload = multer({ storage });
+module.exports = ImageUpload;

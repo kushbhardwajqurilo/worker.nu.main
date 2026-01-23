@@ -169,7 +169,7 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
   const { file } = req;
 
-  const {
+  let {
     project,
     day_off,
     start_working_hours,
@@ -195,6 +195,9 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
   const parsedFinishHours = safeParse(finish_hours);
 
   /* ---------- VALIDATION ---------- */
+  if (!workerId) {
+    workerId = req.worker_id;
+  }
   if (!workerId || !mongoose.isValidObjectId(workerId)) {
     return next(new AppError("Invalid workerId", 400));
   }
@@ -594,7 +597,7 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
         {
           path: "project.projectId",
           select:
-            "project_details.prject_name project_details.project_location_address",
+            "project_details.project_name project_details.project_location_address",
         },
         {
           path: "workerId",
@@ -608,7 +611,6 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
       ])
       .sort({ createdAt: 1 })
       .lean();
-
     /* ---------- HOURS FORMATTER ---------- */
     const formatHours = (decimalHours = 0) => {
       const hours = Math.floor(decimalHours);
@@ -649,7 +651,7 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
           ? {
               _id: obj.project.projectId._id,
               project_name:
-                obj.project.projectId.project_details?.project_name || "",
+                obj.project.projectId?.project_details?.project_name || "",
               project_date: obj.project.project_date || "",
               address:
                 obj.project.projectId.project_details
@@ -769,22 +771,29 @@ exports.updateTimeInHours = catchAsync(async (req, res, next) => {
 
 // approve hours
 exports.approveHours = catchAsync(async (req, res, next) => {
-  const { h_id, status } = req.query;
+  const { tenantId } = req;
+  if (!tenantId) {
+    return next(new AppError("tenantId Missing", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+  const { h_id, type } = req.query;
 
   if (!h_id || !mongoose.isValidObjectId(h_id))
     return next(new AppError("Invalid hours id", 400));
 
-  if (!status) return next(new AppError("Status required", 400));
+  if (!type) return next(new AppError("type required", 400));
 
-  const result = await hoursModel.findByIdAndUpdate(
-    h_id,
-    { status },
+  const result = await hoursModel.findOneAndUpdate(
+    { _id: h_id, tenantId },
+    { $set: { status: type } },
     { new: true },
   );
 
   if (!result) return next(new AppError("Record not found", 404));
 
-  return sendSuccess(res, "hours updated successfully", result, 200, true);
+  return sendSuccess(res, `hours ${type} successfully`, result, 200, true);
 });
 
 // <------- dahsboard hours --------->
