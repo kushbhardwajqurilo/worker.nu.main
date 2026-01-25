@@ -46,7 +46,7 @@ if (cluster.isPrimary) {
 
       initSocket(server);
 
-      server.listen(PORT, () => {
+      server.listen(PORT, "0.0.0.0", () => {
         console.log(`Server running on PORT: ${PORT} | Worker ${process.pid}`);
       });
     })
