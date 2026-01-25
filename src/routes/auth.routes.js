@@ -15,12 +15,17 @@ const authRouter = require("express").Router();
 authRouter.post("/admin-signup", adminSignup);
 authRouter.post("/login", adminLogin);
 authRouter.post("/refresh-token", refreshToken);
-authRouter.get("/get-reset-url", generateForgetPasswordURL);
+authRouter.get(
+  "/get-reset-url",
+  authMiddeware,
+  accessMiddleware("admin"),
+  generateForgetPasswordURL,
+);
 authRouter.patch("/forget-password", adminForgetPasswordController);
 authRouter.get(
   "/logout",
   authMiddeware,
   accessMiddleware("admin"),
-  adminLogoutController
+  adminLogoutController,
 );
 module.exports = authRouter;

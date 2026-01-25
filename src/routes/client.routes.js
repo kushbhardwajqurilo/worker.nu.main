@@ -14,6 +14,8 @@ const {
 } = require("../controller/client/client.controller");
 const {
   isClientSign,
+  getAllHoursOfWorkerToClientController,
+  getSingleWorkerWeeklyHoursToClientController,
 } = require("../controller/client/clientDashboard.controller");
 const {
   authMiddeware,
@@ -88,5 +90,17 @@ clientRouter.get(
   clientAuthMiddleware,
   accessMiddleware("client"),
   isClientSign,
+);
+clientRouter.get(
+  "/client-worker-hours",
+  clientAuthMiddleware,
+  accessMiddleware("client"),
+  getAllHoursOfWorkerToClientController,
+);
+clientRouter.get(
+  "/client-single-workers-hours",
+  clientAuthMiddleware,
+  accessMiddleware("client"),
+  getSingleWorkerWeeklyHoursToClientController,
 );
 module.exports = clientRouter;

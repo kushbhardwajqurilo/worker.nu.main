@@ -387,7 +387,6 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
   const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
   const limit =
     Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 10;
-
   const skip = (page - 1) * limit;
 
   /* ---------- CURRENT WEEK (MON–SUN) ---------- */
@@ -402,9 +401,15 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
   weekEnd.setDate(weekStart.getDate() + 6);
   weekEnd.setHours(23, 59, 59, 999);
 
-  /* ---------- FETCH DATA ---------- */
+  /* ---------- FETCH ONLY CURRENT WEEK DATA ---------- */
   const hoursData = await hoursModel
-    .find({ tenantId })
+    .find({
+      tenantId,
+      createdAt: {
+        $gte: weekStart,
+        $lte: weekEnd,
+      },
+    })
     .populate([
       {
         path: "project.projectId",
@@ -413,7 +418,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
       {
         path: "workerId",
         select:
-          "worker_personal_details.firstName worker_personal_details.lastName worker_position",
+          "worker_personal_details.firstName worker_personal_details.lastName worker_position personal_information.documents.profile_picture",
         populate: {
           path: "worker_position",
           select: "position",
@@ -423,7 +428,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
     .sort({ createdAt: -1 })
     .lean();
 
-  /* ---------- WORKER MAP (WITH LATE CHECK) ---------- */
+  /* ---------- WORKER MAP (LATE CHECK) ---------- */
   const workerMap = new Map();
 
   for (const item of hoursData) {
@@ -448,11 +453,9 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
     } else {
       const existing = workerMap.get(workerKey);
 
-      // 🔥 ANY DAY LATE → WORKER LATE
       if (lateResult.isLate) {
         existing.is_late = true;
 
-        // optional: store max late time
         if (lateResult.lateMinutes > existing.late_minutes) {
           existing.late_minutes = lateResult.lateMinutes;
           existing.late_time = lateResult.lateTime;
@@ -477,13 +480,13 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
   /* ---------- WEEK RANGE LABEL ---------- */
   const formatWeekRangeLabel = (startDate, endDate) => {
     const options = { day: "numeric", month: "short" };
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-
-    return `${start.toLocaleDateString(
+    return `${new Date(startDate).toLocaleDateString(
       "en-IN",
       options,
-    )} - ${end.toLocaleDateString("en-IN", options)} ${end.getFullYear()}`;
+    )} - ${new Date(endDate).toLocaleDateString(
+      "en-IN",
+      options,
+    )} ${new Date(endDate).getFullYear()}`;
   };
 
   /* ---------- TRANSFORM DATA ---------- */
@@ -498,6 +501,8 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
             firstName: latest.workerId.worker_personal_details?.firstName || "",
             lastName: latest.workerId.worker_personal_details?.lastName || "",
             position: latest.workerId.worker_position?.[0]?.position || "",
+            profile_picture:
+              latest.workerId.personal_information.documents.profile_picture,
           }
         : null,
 
@@ -519,7 +524,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
       image: latest.image,
       createdAt: latest.createdAt,
       updatedAt: latest.updatedAt,
-      createdBy: latest?.createdBy || "",
+      createdBy: latest.createdBy || "",
       total_hours: formatHours(latest.total_hours),
 
       // ✅ WORKER LEVEL LATE FLAG
@@ -541,7 +546,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
   /* ---------- RESPONSE ---------- */
   return sendSuccess(
     res,
-    "Worker hours fetched successfully",
+    "Current week worker hours fetched successfully",
     {
       total: transformedData.length,
       page,
@@ -602,7 +607,7 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
         {
           path: "workerId",
           select:
-            "worker_personal_details.firstName worker_personal_details.lastName worker_position",
+            "worker_personal_details.firstName worker_personal_details.lastName worker_position personal_information.documents.profile_picture",
           populate: {
             path: "worker_position",
             select: "position",
@@ -644,6 +649,8 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
               firstName: obj.workerId.worker_personal_details?.firstName || "",
               lastName: obj.workerId.worker_personal_details?.lastName || "",
               position: obj.workerId.worker_position?.[0]?.position || "",
+              profile_picture:
+                obj.workerId.personal_information.documents.profile_picture,
             }
           : null,
 
@@ -772,53 +779,113 @@ exports.updateTimeInHours = catchAsync(async (req, res, next) => {
 // approve hours
 exports.approveHours = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
+
   if (!tenantId) {
     return next(new AppError("tenantId Missing", 400));
   }
+
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant-id", 400));
   }
+
   const { h_id, type } = req.query;
 
-  if (!h_id || !mongoose.isValidObjectId(h_id))
+  if (!h_id || !mongoose.isValidObjectId(h_id)) {
     return next(new AppError("Invalid hours id", 400));
+  }
 
-  if (!type) return next(new AppError("type required", 400));
+  const allowedStatus = ["review", "approved"];
+
+  if (!allowedStatus.includes(type)) {
+    return next(
+      new AppError(
+        `Invalid status type. Allowed: ${allowedStatus.join(", ")}`,
+        400,
+      ),
+    );
+  }
 
   const result = await hoursModel.findOneAndUpdate(
     { _id: h_id, tenantId },
     { $set: { status: type } },
-    { new: true },
+    { new: true, runValidators: true },
   );
 
-  if (!result) return next(new AppError("Record not found", 404));
+  if (!result) {
+    return next(new AppError("Record not found", 404));
+  }
 
-  return sendSuccess(res, `hours ${type} successfully`, result, 200, true);
+  return sendSuccess(res, `hours ${type} successfully`, {}, 200, true);
 });
 
 // <------- dahsboard hours --------->
 
-exports.dashboardHours = catchAsync(async (req, res) => {
+exports.dashboardHours = catchAsync(async (req, res, next) => {
+  const { tenantId, client_id } = req;
+
+  if (!tenantId) {
+    return next(new AppError("Tenant Id missing in headers", 400));
+  }
+
   const now = new Date();
+
+  /* ---------- DATE RANGES ---------- */
+
+  // Current Month
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
+  // Last Month
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  /* ---------- CLIENT → PROJECT → WORKERS ---------- */
+
+  const clientProjects = await projectMode
+    .find({
+      tenantId,
+      "client_details.client": client_id,
+    })
+    .select("project_workers.workers")
+    .lean();
+
+  // collect worker ids
+  let worker_ids = clientProjects.flatMap(
+    (p) => p.project_workers?.workers || [],
+  );
+
+  // remove duplicates + ensure ObjectId
+  worker_ids = [...new Set(worker_ids.map((id) => id.toString()))].map(
+    (id) => new mongoose.Types.ObjectId(id),
+  );
+
+  if (worker_ids.length === 0) {
+    return sendSuccess(
+      res,
+      "success",
+      {
+        monthly_hours: {
+          title: "total hours this month",
+          total: "0.00h",
+          last_month: "0.00h",
+          evaluation: {
+            type: "good",
+            value: "0%",
+          },
+        },
+      },
+      200,
+      true,
+    );
+  }
+
   /* ---------- 1️⃣ Pending Hours ---------- */
   const pendingResult = await hoursModel.aggregate([
-    { $match: { status: "pending" } },
-    {
-      $group: {
-        _id: null,
-        total: { $sum: { $ifNull: ["$total_hours", 0] } },
-      },
-    },
-  ]);
-
-  /* ---------- 2️⃣ Total Hours (Current Month) ---------- */
-  const monthHoursResult = await hoursModel.aggregate([
     {
       $match: {
-        createdAt: { $gte: startOfMonth, $lt: endOfMonth },
+        tenantId,
+        workerId: { $in: worker_ids },
+        status: "pending",
       },
     },
     {
@@ -829,26 +896,75 @@ exports.dashboardHours = catchAsync(async (req, res) => {
     },
   ]);
 
-  /* ---------- 3️⃣ ACTIVE PROJECTS (FIXED) ---------- */
+  /* ---------- 2️⃣ Current Month Approved Hours ---------- */
+  const currentMonthResult = await hoursModel.aggregate([
+    {
+      $match: {
+        tenantId,
+        workerId: { $in: worker_ids }, // ✅ FIXED
+        createdAt: { $gte: startOfMonth, $lt: endOfMonth },
+        status: "approved",
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: { $ifNull: ["$total_hours", 0] } },
+      },
+    },
+  ]);
 
-  // ⛔ DON'T include extra fields here
-  const projectIds = await hoursModel.distinct("project", {
-    createdAt: { $gte: startOfMonth, $lt: endOfMonth },
-  });
+  /* ---------- 3️⃣ Last Month Approved Hours ---------- */
+  const lastMonthResult = await hoursModel.aggregate([
+    {
+      $match: {
+        tenantId,
+        workerId: { $in: worker_ids }, // ✅ FIXED
+        createdAt: { $gte: startOfLastMonth, $lt: endOfLastMonth },
+        status: "approved",
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: { $ifNull: ["$total_hours", 0] } },
+      },
+    },
+  ]);
 
-  // ✅ projectIds = [ObjectId, ObjectId, ObjectId]
-  const activeProjectsThisMonth = await projectMode.countDocuments({
-    _id: { $in: projectIds },
-    tenantId: req.tenantId,
-    status: "active",
-  });
+  /* ---------- VALUES ---------- */
+  const pendingHours = pendingResult[0]?.total || 0;
+  const currentMonthHours = currentMonthResult[0]?.total || 0;
+  const lastMonthHours = lastMonthResult[0]?.total || 0;
 
-  res.status(200).json({
-    success: true,
-    pendingHours: pendingResult[0]?.total || 0,
-    totalHoursThisMonth: monthHoursResult[0]?.total || 0,
-    activeProjectsThisMonth,
-  });
+  /* ---------- 4️⃣ Percentage Hike (clamped) ---------- */
+  let hikePercentage = 0;
+  let isUp = true;
+
+  if (lastMonthHours > 0) {
+    const rawPercentage =
+      ((currentMonthHours - lastMonthHours) / lastMonthHours) * 100;
+
+    // clamp between -100 and +100
+    hikePercentage = Math.max(-100, Math.min(rawPercentage, 100));
+    isUp = hikePercentage >= 0;
+  }
+
+  /* ---------- RESPONSE FORMAT ---------- */
+  const formatedData = {
+    monthly_hours: {
+      title: "total hours this month",
+      total: `${currentMonthHours.toFixed(2)}h`,
+      last_month: `${lastMonthHours.toFixed(2)}h`,
+      evaluation: {
+        type: isUp ? "good" : "bad",
+        value: `${hikePercentage.toFixed(2)}%`,
+      },
+    },
+    pending_hours: `${pendingHours.toFixed(2)}h`,
+  };
+
+  return sendSuccess(res, "success", formatedData, 200, true);
 });
 
 // <------ dashboard hours end ---------->
@@ -1041,3 +1157,47 @@ exports.getDashboardStatsService = async () => {
   };
   return sendSuccess(res, "success", data, 200, true);
 };
+
+// approve weekly horus
+exports.approveHoursByWeekRange = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  const { weekRange, worker_id, type } = req.body;
+
+  if (!tenantId) {
+    return next(new AppError("Tenant Id missing", 400));
+  }
+
+  if (!weekRange || !weekRange.startDate || !weekRange.endDate) {
+    return next(new AppError("Week range missing", 400));
+  }
+
+  /* ---------- PARSE WEEK RANGE ---------- */
+  const weekStart = new Date(weekRange.startDate);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const weekEnd = new Date(weekRange.endDate);
+  weekEnd.setHours(23, 59, 59, 999);
+
+  /* ---------- UPDATE HOURS ---------- */
+  const result = await hoursModel.updateMany(
+    {
+      tenantId,
+      workerId: worker_id,
+      createdAt: {
+        $gte: weekStart,
+        $lte: weekEnd,
+      },
+    },
+    {
+      $set: {
+        status: type,
+        updatedAt: new Date(),
+      },
+    },
+    { new: true, runValidators: true },
+  );
+  if (result.modifiedCount === 0) {
+    return next(new AppError("Hours Not found In this week range", 400));
+  }
+  return sendSuccess(res, `Hours ${type} successfully`, {}, 200, true);
+});

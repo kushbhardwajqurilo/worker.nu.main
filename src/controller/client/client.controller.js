@@ -58,6 +58,8 @@ exports.addClient = catchAsync(async (req, res, next) => {
   );
 
   client.client_url = `http://localhost:3000/client?tkn=${urlToken}`;
+  client.urlVisibleToAdmin = true;
+  client.urlAdminExpireAt = Date.now() + 24 * 60 * 60 * 1000;
   await client.save();
   sendSuccess(res, "Client add successfully", {}, 200, true);
 });

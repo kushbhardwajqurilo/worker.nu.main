@@ -45,13 +45,14 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization", "Tenant-Id"],
-  })
+  }),
 );
 // console.log(
 //   "paht",
 //   path.join(__dirname, "src/templates", "forgetPassword.html")
 // );
 // Test route
+app.use("/uploads", express.static(path.join(__dirname, "public/upload")));
 const baseUrl = "/api/v1/";
 app.get("/", (req, res) => {
   res.send("<h1>Server running</h1>");
@@ -67,12 +68,12 @@ app.get("/reset-password", (req, res) => {
 
     // Valid → Serve HTML page
     return res.sendFile(
-      path.join(__dirname, "src/templates", "forgetPassword.html")
+      path.join(__dirname, "src/templates", "forgetPassword.html"),
     );
   } catch (err) {
     // Expired → Show error
     return res.sendFile(
-      path.join(__dirname, "src/templates", "resetExpired.html")
+      path.join(__dirname, "src/templates", "resetExpired.html"),
     );
   }
 });
@@ -207,11 +208,11 @@ app.get("/download-hours-report", async (req, res) => {
   // Send file
   res.setHeader(
     "Content-Type",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
   res.setHeader(
     "Content-Disposition",
-    "attachment; filename=hours_report.xlsx"
+    "attachment; filename=hours_report.xlsx",
   );
 
   await workbook.xlsx.write(res);

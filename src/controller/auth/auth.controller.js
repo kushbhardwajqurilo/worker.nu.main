@@ -9,6 +9,7 @@ const {
 } = require("../../utils/errorHandler");
 const tokenMode = require("../../models/authmodel/tokenMode");
 const { generateCustomUUID } = require("custom-uuid-generator");
+const SentMail = require("../../confing/mail/nodeMail");
 
 // access and referesh tokens
 const generateAcessToken = (data) => {
@@ -85,7 +86,28 @@ exports.adminSignup = catchAsync(async (req, res, next) => {
   if (!admin) {
     return next(new AppError("Failed to add admin", 400));
   }
-  sendSuccess(res, "admin add successfully", {}, 200);
+  const rememberme = true;
+  const expire = rememberme ? "30d" : "7d";
+  const accessToken = generateAcessToken({
+    admin_id: admin._id,
+    tenant: admin.tenantId,
+    role: "admin",
+    name: admin.name,
+  });
+  const refreshToken = await generateRefreshToken(
+    {
+      admin_id: admin._id,
+      tenant: admin.tenantId,
+      role: "admin",
+    },
+    expire,
+  );
+  sendSuccess(
+    res,
+    "admin add successfully",
+    { accessToken, refreshToken },
+    200,
+  );
 });
 
 // admin signup end
@@ -196,14 +218,14 @@ exports.refreshToken = catchAsync(async (req, res, next) => {
 // generate forget password URL
 
 exports.generateForgetPasswordURL = catchAsync(async (req, res, next) => {
-  const { email } = req.body;
-  if (!email || email.trim().length === 0) {
+  const { tenantId } = req;
+  if (!tenantId || tenantId.trim().length === 0) {
     return next(new AppError("Email required", 400));
   }
 
-  const isEmail = await adminModel.findOne({ email });
+  const isEmail = await adminModel.findOne({ tenantId });
   if (!isEmail) {
-    return next(new AppError("Email not registered", 400));
+    return next(new AppError("Invalid Tenant", 400));
   }
 
   const resetToken = jwt.sign({ id: isEmail._id }, process.env.RESET_PASS_KEY, {
@@ -212,7 +234,107 @@ exports.generateForgetPasswordURL = catchAsync(async (req, res, next) => {
 
   // FINAL RESET URL (frontend or backend UI)
   const fullURL = `${process.env.BASE_URL}/reset-password?q=${resetToken}`;
+  const sent = await SentMail(
+    isEmail.email,
+    "Reste Password",
+    "Worker.nu",
+    ` <html>
+  <head>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #f4f6f8;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+      .container {
+        max-width: 600px;
+        margin: 40px auto;
+        background: #ffffff;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+      }
+      .header {
+        background: #2563eb;
+        color: #ffffff;
+        padding: 20px;
+        text-align: center;
+        font-size: 22px;
+        font-weight: bold;
+      }
+      .content {
+        padding: 30px;
+        color: #333333;
+        font-size: 15px;
+        line-height: 1.6;
+      }
+      .btn {
+        display: inline-block;
+        margin: 25px 0;
+        padding: 12px 28px;
+        background: #2563eb;
+        color: #ffffff !important;
+        text-decoration: none;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: bold;
+      }
+      .footer {
+        background: #f1f5f9;
+        padding: 15px;
+        text-align: center;
+        font-size: 13px;
+        color: #666666;
+      }
+      .note {
+        font-size: 13px;
+        color: #777777;
+        margin-top: 15px;
+      }
+    </style>
+  </head>
 
+  <body>
+    <div class="container">
+      <div class="header">
+        Reset Your Password
+      </div>
+
+      <div class="content">
+        <p>Hello,</p>
+
+        <p>
+          Hi ${isEmail.name} We received a request to reset the password for your account.
+          If you made this request, please click the button below to set a new password.
+        </p>
+
+        <p style="text-align: center;">
+          <a href=${fullURL} class="btn">
+            Reset Password
+          </a>
+        </p>
+
+        <p class="note">
+          This password reset link is valid for the next <strong>5 minutes</strong>.
+          If you did not request a password reset, please ignore this email.
+        </p>
+
+        <p>
+          Best regards,<br />
+          <strong>Worker.nu Team</strong>
+        </p>
+      </div>
+
+      <div class="footer">
+        © 2026 Worker.nu. All rights reserved.
+      </div>
+    </div>
+  </body>
+</html>
+
+    `,
+  );
   return sendSuccess(res, "URL Sent To Mail", { resetUrl: fullURL }, 200, true);
 });
 

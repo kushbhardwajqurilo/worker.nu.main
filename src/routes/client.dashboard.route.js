@@ -1,6 +1,6 @@
 const {
   getClientInformation,
-} = require("../controller/client/clientdashboard.controller");
+} = require("../controller/client/clientDashboard.controller");
 const {
   clientAuthMiddleware,
   accessMiddleware,
@@ -11,7 +11,7 @@ clientDashboardRouter.post(
   "/get-client",
   clientAuthMiddleware,
   getClientInformation,
-  accessMiddleware("client")
+  accessMiddleware("client"),
 );
 
 module.exports = clientDashboardRouter;

@@ -44,7 +44,12 @@ const clientSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  urlVisibleToAdmin: { type: Boolean, default: true },
 
+  urlAdminExpireAt: {
+    type: Date,
+    default: () => Date.now() + 24 * 60 * 60 * 1000,
+  },
   clientSignature: {
     type: String,
     default: "blank.png",

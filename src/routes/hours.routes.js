@@ -12,6 +12,7 @@ const {
   updateTimeInHours,
   updateHoursCommment,
   approveHours,
+  approveHoursByWeekRange,
 } = require("../controller/hours/hours.controller");
 const {
   authMiddeware,
@@ -35,8 +36,14 @@ hoursRouter.post(
 );
 
 /* ---------------- UPDATE HOURS (Worker/Admin) ---------- */
-hoursRouter.put("/update-hours", updateWorkerHours);
+hoursRouter.post(
+  "/approve-hours",
+  clientAuthMiddleware,
+  accessMiddleware("client"),
+  approveHours,
+);
 
+hoursRouter.put("/update-hours", updateWorkerHours);
 // /* ---------------- GET ONE HOURS RECORD ----------------- */
 hoursRouter.get("/single", getSingleHoursDetailsController);
 // example: /hours/single?h_id=12345
@@ -65,14 +72,14 @@ Body: { workerId, weekNumber }
 hoursRouter.patch("/approve-week", approveWeek);
 
 // client hours approve
-hoursRouter.patch(
-  "approve-hours",
+
+// dashboard hours
+hoursRouter.get(
+  "/get-hours",
   clientAuthMiddleware,
   accessMiddleware("client"),
-  approveHours,
+  dashboardHours,
 );
-// dashboard hours
-hoursRouter.get("/get-hours", dashboardHours);
 
 hoursRouter.get(
   "/single-worker-hour",
@@ -91,5 +98,13 @@ hoursRouter.patch(
   authMiddeware,
   accessMiddleware("admin"),
   updateHoursCommment,
+);
+
+// weekly hours approve by client
+hoursRouter.put(
+  "/weekhours-approve",
+  clientAuthMiddleware,
+  accessMiddleware("client"),
+  approveHoursByWeekRange,
 );
 module.exports = hoursRouter;
