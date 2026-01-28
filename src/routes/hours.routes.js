@@ -13,6 +13,7 @@ const {
   updateHoursCommment,
   approveHours,
   approveHoursByWeekRange,
+  checkSubmitHoursOnDateForClientWorker,
 } = require("../controller/hours/hours.controller");
 const {
   authMiddeware,
@@ -20,6 +21,7 @@ const {
   workerOrAdminAuthMiddleware,
   clientOrAdminAuthMiddleware,
   clientAuthMiddleware,
+  workerAuthMiddleware,
 } = require("../middleware/authMiddleware");
 
 const hoursRouter = require("express").Router();
@@ -107,4 +109,13 @@ hoursRouter.put(
   accessMiddleware("client"),
   approveHoursByWeekRange,
 );
+
+// <----- check submited hours by date --------->
+hoursRouter.post(
+  "/check-hours",
+  workerAuthMiddleware,
+  accessMiddleware("worker"),
+  checkSubmitHoursOnDateForClientWorker,
+);
+// <-----end ------->
 module.exports = hoursRouter;

@@ -19,6 +19,9 @@ const {
   getWorkerHolidayDetails,
   getAllHoursForWorkers,
   LastAndThisWeekTotalHours,
+  requestInformation,
+  getRequestForWorker,
+  getWorkerIdendtity,
 } = require("../controller/worker/worker.controller");
 const {
   authMiddeware,
@@ -146,5 +149,27 @@ workerRouter.get(
   workerAuthMiddleware,
   accessMiddleware("worker"),
   LastAndThisWeekTotalHours,
+);
+
+// worker information request
+workerRouter.post(
+  "/information-request",
+  authMiddeware,
+  accessMiddleware("admin"),
+  requestInformation,
+);
+
+workerRouter.get(
+  "/get-request",
+  workerAuthMiddleware,
+  accessMiddleware("worker"),
+  getRequestForWorker,
+);
+
+workerRouter.get(
+  "/get-worker-identificaiton",
+  workerAuthMiddleware,
+  accessMiddleware("worker"),
+  getWorkerIdendtity,
 );
 module.exports = workerRouter;

@@ -36,16 +36,11 @@ if (cluster.isPrimary) {
   // ================= WORKERS =================
   const app = require("./app");
   const connectDB = require("./src/confing/DB");
-  const { initSocket } = require("./socket/scoket");
-
   const server = http.createServer(app);
 
   connectDB()
     .then(() => {
       console.log(`DB connected | Worker ${process.pid}`);
-
-      initSocket(server);
-
       server.listen(PORT, "0.0.0.0", () => {
         console.log(`Server running on PORT: ${PORT} | Worker ${process.pid}`);
       });

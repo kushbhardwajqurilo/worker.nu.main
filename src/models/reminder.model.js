@@ -39,13 +39,15 @@ const ReminderSchema = new mongoose.Schema(
       { type: mongoose.Schema.Types.ObjectId, default: null, ref: "project" },
     ],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const NotificationSchema = new mongoose.Schema({
+  tenantId: { type: String, required: [true, "tenant id required"] },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     required: [true, "user id required"],
+    ref: "worker",
   },
   message: {
     type: String,
@@ -55,6 +57,9 @@ const NotificationSchema = new mongoose.Schema({
     type: String,
     required: [true, "title required"],
   },
+  read: { type: Boolean, default: false },
+  type: { type: String, default: null },
+  redirectUrl: { type: String, default: null },
 });
 const WorkerReminder = mongoose.model("reminder", ReminderSchema);
 const Notification = mongoose.model("Notification", NotificationSchema);

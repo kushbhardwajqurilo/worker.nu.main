@@ -21,6 +21,11 @@ const { calculateAge, formatDateUTC } = require("../../utils/calcuateAge");
 const { cloudinary } = require("../../confing/cloudinaryConfig");
 const fs = require("fs");
 const extractDate = require("../../utils/extracrDate");
+const workerRequestModel = require("../../models/workerRequest.model");
+const {
+  createNotification,
+} = require("../notifications/notification.controller");
+const { Notification } = require("../../models/reminder.model");
 // ----------------------------------------- ADMIN DASHBOARD API'S -----------------------------------------------
 
 // <---------- Add Worker Start Here ------------>
@@ -307,7 +312,22 @@ exports.addWorker = catchAsync(async (req, res, next) => {
   worker.dashboardUrl = `https://ql3cm80q-3000.inc1.devtunnels.ms/worker?tkn=${worker_token}`;
   worker.urlVisibleToAdmin = true;
   worker.urlAdminExpireAt = Date.now() + 24 * 60 * 60 * 1000;
-
+  const projectList = [];
+  if (Array.isArray(payload.project)) {
+    payload.project.forEach((val) => {
+      projectList.push(new mongoose.Types.ObjectId(val.projectId));
+    });
+  }
+  const projectIdInsert = await projectMode.updateMany(
+    {
+      _id: { $in: projectList }, // 👈 filter
+    },
+    {
+      $addToSet: {
+        "project_workers.workers": worker._id, // 👈 update
+      },
+    },
+  );
   await worker.save();
 
   return sendSuccess(res, "Worker added successfully", worker, 200, true);
@@ -1258,12 +1278,110 @@ exports.getAllProjectsToWorkerAddController = catchAsync(
 // <----------------- worker dashboard api start ------------------>
 
 // <---------- Holiday / Sickness ------------>
+// exports.requestLeave = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+//   const { w_id } = req.query;
+//   const id = req.worker_id;
+
+//   const { range, reason, leaveType } = req.body;
+
+//   /* ---------- TENANT VALIDATION ---------- */
+//   if (!tenantId) {
+//     return next(new AppError("tenant-id missing", 400));
+//   }
+
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid tenant-id", 400));
+//   }
+
+//   /* ---------- WORKER ID RESOLUTION ---------- */
+//   const worker_id = w_id ? id : w_id;
+
+//   if (!worker_id) {
+//     return next(new AppError("worker_id missing", 400));
+//   }
+
+//   if (!mongoose.Types.ObjectId.isValid(worker_id)) {
+//     return next(new AppError("Invalid worker_id", 400));
+//   }
+
+//   /* ---------- BODY VALIDATION ---------- */
+//   if (!leaveType || !["holiday", "sickness"].includes(leaveType)) {
+//     return next(new AppError("Invalid leaveType (holiday | sickness)", 400));
+//   }
+
+//   if (!range || !range.startDate || !range.endDate || !reason) {
+//     return next(
+//       new AppError("startDate, endDate and reason are required", 400),
+//     );
+//   }
+
+//   const startDate = new Date(range.startDate);
+//   const endDate = new Date(range.endDate);
+
+//   if (isNaN(startDate) || isNaN(endDate)) {
+//     return next(new AppError("Invalid date format", 400));
+//   }
+
+//   if (startDate > endDate) {
+//     return next(new AppError("startDate cannot be greater than endDate", 400));
+//   }
+
+//   /* ---------- WORKER CHECK ---------- */
+//   const isWorker = await workerModel.findOne({
+//     tenantId,
+//     _id: worker_id,
+//     isDelete: false,
+//     isActive: true,
+//   });
+
+//   if (!isWorker) {
+//     return next(new AppError("Worker not found or inactive", 400));
+//   }
+
+//   /* ---------- TOTAL DAYS ---------- */
+//   const totalDays =
+//     Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+
+//   /* ---------- COMMON PAYLOAD ---------- */
+//   const payload = {
+//     tenantId,
+//     workerId: worker_id,
+//     duration: {
+//       startDate,
+//       endDate,
+//       totalDays,
+//     },
+//   };
+
+//   let leaveRequest;
+
+//   /* ---------- INSERT BASED ON TYPE ---------- */
+//   if (leaveType === "holiday") {
+//     leaveRequest = await holidayModel.create({
+//       ...payload,
+//       reason,
+//     });
+//   }
+
+//   if (leaveType === "sickness") {
+//     leaveRequest = await sicknessModel.create({
+//       ...payload,
+//       description: reason,
+//     });
+//   }
+
+//   return sendSuccess(
+//     res,
+//     "Leave request submitted successfully",
+//     leaveRequest,
+//     201,
+//     true,
+//   );
+// });
 exports.requestLeave = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
-  const { w_id } = req.query;
-  const id = req.worker_id;
-
-  const { range, reason, leaveType } = req.body;
+  const { range, reason, leaveType, workerIds: bodyWorkerIds } = req.body;
 
   /* ---------- TENANT VALIDATION ---------- */
   if (!tenantId) {
@@ -1274,16 +1392,29 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
     return next(new AppError("Invalid tenant-id", 400));
   }
 
-  /* ---------- WORKER ID RESOLUTION ---------- */
-  const worker_id = w_id ? id : w_id;
+  /* ---------- WORKER ID NORMALIZATION ---------- */
+  let workerIds = [];
 
-  if (!worker_id) {
+  // Multiple workers → BODY
+  if (Array.isArray(bodyWorkerIds) && bodyWorkerIds.length > 0) {
+    workerIds = bodyWorkerIds;
+  }
+  // Single worker → req.worker_id
+  else if (req.worker_id) {
+    workerIds = [req.worker_id];
+  }
+
+  if (!workerIds.length) {
     return next(new AppError("worker_id missing", 400));
   }
 
-  if (!mongoose.Types.ObjectId.isValid(worker_id)) {
-    return next(new AppError("Invalid worker_id", 400));
-  }
+  /* ---------- WORKER ID VALIDATION ---------- */
+  workerIds = workerIds.map((wid) => {
+    if (!mongoose.Types.ObjectId.isValid(wid)) {
+      throw new AppError(`Invalid worker_id: ${wid}`, 400);
+    }
+    return new mongoose.Types.ObjectId(wid);
+  });
 
   /* ---------- BODY VALIDATION ---------- */
   if (!leaveType || !["holiday", "sickness"].includes(leaveType)) {
@@ -1296,11 +1427,24 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
     );
   }
 
-  const startDate = new Date(range.startDate);
-  const endDate = new Date(range.endDate);
+  /* ---------- DATE PARSING (SUPPORT DD/MM/YYYY) ---------- */
+  const parseDDMMYYYY = (str) => {
+    const [d, m, y] = str.split("/").map(Number);
+    return new Date(y, m - 1, d);
+  };
 
-  if (isNaN(startDate) || isNaN(endDate)) {
-    return next(new AppError("Invalid date format", 400));
+  let startDate, endDate;
+
+  if (range.startDate.includes("/")) {
+    startDate = parseDDMMYYYY(range.startDate);
+    endDate = parseDDMMYYYY(range.endDate);
+  } else {
+    startDate = new Date(range.startDate);
+    endDate = new Date(range.endDate);
+  }
+
+  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+    return next(new AppError("Invalid startDate or endDate", 400));
   }
 
   if (startDate > endDate) {
@@ -1308,49 +1452,62 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
   }
 
   /* ---------- WORKER CHECK ---------- */
-  const isWorker = await workerModel.findOne({
+  const workers = await workerModel.find({
     tenantId,
-    _id: worker_id,
+    _id: { $in: workerIds },
     isDelete: false,
     isActive: true,
   });
 
-  if (!isWorker) {
-    return next(new AppError("Worker not found or inactive", 400));
+  if (workers.length !== workerIds.length) {
+    return next(new AppError("One or more workers not found or inactive", 400));
   }
 
   /* ---------- TOTAL DAYS ---------- */
   const totalDays =
-    Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+    Math.floor(
+      (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+    ) + 1;
 
-  /* ---------- COMMON PAYLOAD ---------- */
-  const payload = {
+  /* ---------- BASE PAYLOAD (SINGLE SOURCE OF TRUTH) ---------- */
+  const basePayload = workerIds.map((wid) => ({
     tenantId,
-    workerId: worker_id,
+    workerId: wid,
     duration: {
       startDate,
       endDate,
       totalDays,
     },
-  };
+  }));
 
   let leaveRequest;
 
-  /* ---------- INSERT BASED ON TYPE ---------- */
+  /* ---------- INSERT ---------- */
   if (leaveType === "holiday") {
-    leaveRequest = await holidayModel.create({
-      ...payload,
-      reason,
-    });
+    leaveRequest =
+      workerIds.length === 1
+        ? await holidayModel.create({
+            ...basePayload[0],
+            reason,
+          })
+        : await holidayModel.insertMany(
+            basePayload.map((p) => ({ ...p, reason })),
+          );
   }
 
   if (leaveType === "sickness") {
-    leaveRequest = await sicknessModel.create({
-      ...payload,
-      description: reason,
-    });
+    leaveRequest =
+      workerIds.length === 1
+        ? await sicknessModel.create({
+            ...basePayload[0],
+            description: reason,
+          })
+        : await sicknessModel.insertMany(
+            basePayload.map((p) => ({ ...p, description: reason })),
+          );
   }
 
+  /* ---------- RESPONSE ---------- */
   return sendSuccess(
     res,
     "Leave request submitted successfully",
@@ -1831,3 +1988,115 @@ exports.LastAndThisWeekTotalHours = catchAsync(async (req, res, next) => {
     },
   });
 });
+
+// <------- worker request information ------------>
+
+exports.requestInformation = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+
+  /* ---------- VALIDATIONS ---------- */
+  if (!tenantId) {
+    return next(new AppError("Tenant missing", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+
+  if (!req.body || Object.keys(req.body).length === 0) {
+    return next(new AppError("Worker Request Information Required", 400));
+  }
+
+  const { workerId, ...requestInfo } = req.body;
+  const payloadToInsert = [];
+  const notificationPayload = [];
+
+  /* ---------- BUILD PAYLOAD ---------- */
+  if (Array.isArray(workerId)) {
+    for (const id of workerId) {
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return next(new AppError(`Invalid workerId: ${id}`, 400));
+      }
+
+      payloadToInsert.push({
+        tenantId,
+        workerId: id,
+        ...requestInfo,
+      });
+      notificationPayload.push({
+        tenantId,
+        title: "Information Request",
+        message: "Please Submit Your Information",
+        userId: id,
+        type: "INFO",
+      });
+    }
+  }
+  const sendRequest = await workerRequestModel.insertMany(payloadToInsert);
+  if (!sendRequest) {
+    return next(new AppError("failed to send request", 400));
+  }
+
+  const sentNotication = await Notification.insertMany(notificationPayload);
+  return sendSuccess(res, "Request Send SuccessFull", {}, 200, true);
+});
+
+// <---------- get request to worker ---------->
+
+exports.getRequestForWorker = catchAsync(async (req, res, next) => {
+  const { tenantId, worker_id } = req;
+  if (!tenantId) {
+    return next(new AppError("Tenant missing", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-id", 400));
+  }
+  if (!worker_id) {
+    return next(new AppError("Worker id missing", 400));
+  }
+  if (!mongoose.Types.ObjectId.isValid(worker_id)) {
+    return next(new AppError("Invalid Worker ID", 400));
+  }
+  const payload = {
+    tenantId,
+    workerId: worker_id,
+  };
+  const request = await workerRequestModel
+    .findOne(payload)
+    .sort({ createdAt: -1 });
+
+  if (!request) {
+    return sendSuccess(res, "request not found", {}, 200, true);
+  }
+  return sendSuccess(res, "success", request, 200, true);
+});
+
+// <------ get worker woker image id --------->
+
+exports.getWorkerIdendtity = catchAsync(async (req, res, next) => {
+  const { tenantId, worker_id } = req;
+  if (!tenantId) {
+    return next(new AppError("tenant-id missing", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("invalid tenant-id", 400));
+  }
+  if (!worker_id) {
+    return next(new AppError("workre id missing", 400));
+  }
+  if (!mongoose.Types.ObjectId.isValid(worker_id)) {
+    return next(new AppError("Invalid Worker id", 400));
+  }
+  const workerIdentity = await workerModel
+    .findOne({ _id: worker_id, tenantId })
+    .select("personal_information.documents.worker_work_id")
+    .lean();
+  if (!workerIdentity) {
+    return next(new AppError("worker identification not available", 400));
+  }
+  const filterData =
+    workerIdentity.personal_information.documents.worker_work_id;
+  return sendSuccess(res, "Identification Found", filterData, 200, true);
+});
+// <------ worker request end ------------>

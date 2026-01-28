@@ -233,10 +233,10 @@ exports.generateForgetPasswordURL = catchAsync(async (req, res, next) => {
   });
 
   // FINAL RESET URL (frontend or backend UI)
-  const fullURL = `${process.env.BASE_URL}/reset-password?q=${resetToken}`;
+  const fullURL = `https://4frnn03l-8002.inc1.devtunnels.ms/reset-password?q=${resetToken}`;
   const sent = await SentMail(
     isEmail.email,
-    "Reste Password",
+    "Resete Password",
     "Worker.nu",
     ` <html>
   <head>
@@ -327,7 +327,7 @@ exports.generateForgetPasswordURL = catchAsync(async (req, res, next) => {
       </div>
 
       <div class="footer">
-        © 2026 Worker.nu. All rights reserved.
+        © Worker.nu. All rights reserved.
       </div>
     </div>
   </body>
@@ -335,7 +335,13 @@ exports.generateForgetPasswordURL = catchAsync(async (req, res, next) => {
 
     `,
   );
-  return sendSuccess(res, "URL Sent To Mail", { resetUrl: fullURL }, 200, true);
+  return sendSuccess(
+    res,
+    "URL Sent To Mail",
+    `A password reset link has been sent to ${isEmail.email}`,
+    200,
+    true,
+  );
 });
 
 // end generate forget passowrd url

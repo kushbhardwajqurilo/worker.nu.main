@@ -38,13 +38,13 @@ const workerHoursSchema = new mongoose.Schema(
     day_off: { type: Boolean, default: false },
 
     start_working_hours: {
-      hours: Number, // 0–23
-      minutes: Number, // 0–59
+      hours: { type: Number, default: null }, // 0–23
+      minutes: { type: Number, default: null }, // 0–59
     },
 
     finish_hours: {
-      hours: Number, // 0–23
-      minutes: Number, // 0–59
+      hours: { type: Number, default: null }, // 0–23
+      minutes: { type: Number, default: null }, // 0–59
     },
 
     break_time: {

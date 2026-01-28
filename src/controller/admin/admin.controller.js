@@ -10,7 +10,7 @@ const adminModel = require("../../models/authmodel/adminModel");
 const { workerModel } = require("../../models/workerModel");
 
 const projectMode = require("../../models/projectMode");
-const { WorkerReminder } = require("../../models/reminder.model");
+const { WorkerReminder, Notification } = require("../../models/reminder.model");
 const { isValidCustomUUID } = require("custom-uuid-generator");
 
 //get leaves for admin
@@ -545,10 +545,24 @@ exports.setProjectReminder = catchAsync(async (req, res, next) => {
     project: projects, // empty array allowed except project type
   };
 
+  // notification paylod
+  let notificationPayload = [];
+  if (Array.isArray(worker)) {
+    worker.map((val, pos) => {
+      notificationPayload.push({
+        tenantId,
+        title: title.trim(),
+        message: note.trim(),
+        userId: new mongoose.Types.ObjectId(val),
+        type: "SUCCESS",
+      });
+    });
+  }
   const reminder = await WorkerReminder.create(reminderPayload);
   if (!reminder) {
     return next(new AppError("new reminders not founds", 400));
   }
+  const setNotification = await Notification.insertMany(notificationPayload);
   return sendSuccess(res, "Reminder set successfully", {}, 201, true);
 });
 

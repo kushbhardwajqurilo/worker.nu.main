@@ -237,7 +237,7 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
     workerId,
     createdBy: req.role,
   };
-
+  console.log("payload", payload);
   // ✅ IMAGE OPTIONAL
   if (file?.path) {
     payload.image = file.path;
@@ -1201,3 +1201,77 @@ exports.approveHoursByWeekRange = catchAsync(async (req, res, next) => {
   }
   return sendSuccess(res, `Hours ${type} successfully`, {}, 200, true);
 });
+
+// check sumbit hours on this date
+exports.checkSubmitHoursOnDateForClientWorker = catchAsync(
+  async (req, res, next) => {
+    const requiredFields = ["project_id", "date"];
+    const { tenantId, worker_id } = req;
+
+    for (let field of requiredFields) {
+      if (!req.body[field] || req.body[field].toString().trim().length === 0) {
+        return next(new AppError(`${field} required`, 400));
+      }
+    }
+
+    const { project_id, date } = req.body;
+    if (!tenantId || !isValidCustomUUID(tenantId)) {
+      return next(new AppError("Missing Tenant-id or invalid", 400));
+    }
+
+    if (!worker_id || !mongoose.Types.ObjectId.isValid(worker_id)) {
+      return next(new AppError("Invalid worker or missing", 400));
+    }
+
+    /* 🔥 DATE FIX START */
+    const inputDate = new Date(date);
+    // start of day (IST)
+    const startOfDay = new Date(
+      inputDate.getFullYear(),
+      inputDate.getMonth(),
+      inputDate.getDate(),
+    );
+    // end of day (IST)
+    const endOfDay = new Date(
+      inputDate.getFullYear(),
+      inputDate.getMonth(),
+      inputDate.getDate() + 1,
+    );
+    /* 🔥 DATE FIX END */
+
+    const payload = {
+      tenantId,
+      workerId: worker_id,
+      "project.projectId": new mongoose.Types.ObjectId(project_id),
+      "project.project_date": {
+        $gte: startOfDay,
+        $lt: endOfDay,
+      },
+    };
+
+    const submit_hours = await hoursModel
+      .findOne(payload)
+      .populate({
+        path: "project.projectId",
+        select: "project_details.project_name",
+      })
+      .select("project start_working_hours finish_hours day_off")
+      .lean();
+
+    if (!submit_hours) {
+      return sendSuccess(res, "success", {}, 200, false);
+    }
+    const filterData = {
+      project_name:
+        submit_hours?.project.projectId?.project_details?.project_name,
+      date: submit_hours?.day_off
+        ? "Day Off"
+        : `${
+            new Date()
+              ?.toLocaleString(submit_hours?.project?.project_date)
+              ?.split(",")[0]
+          } from ${submit_hours?.start_working_hours?.hours}:${submit_hours?.start_working_hours?.minutes} to ${submit_hours.finish_hours.hours}:${submit_hours.finish_hours.minutes}`,
+    };
+    return sendSuccess(res, "success", filterData, 200, true);
+  },
+);

@@ -21,6 +21,7 @@ const settingsRouter = require("./src/routes/settings.routes");
 const ExcelJS = require("exceljs");
 const adminRouter = require("./src/routes/admin.route");
 const clientDashboardRouter = require("./src/routes/client.dashboard.route");
+const notificationRouter = require("./src/routes/notification.route");
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 const allowedOrigins = [
@@ -29,6 +30,8 @@ const allowedOrigins = [
   "https://yourdomain.com",
   "https://admin.yourdomain.com",
   "https://ql3cm80q-3000.inc1.devtunnels.ms",
+  "http://localhost:8002",
+  "https://4frnn03l-8002.inc1.devtunnels.ms",
 ];
 
 app.use(
@@ -102,6 +105,7 @@ app.use(`${baseUrl}hours`, hoursRouter); // hours route
 app.use(`${baseUrl}project`, projectRouter); // project route
 app.use(`${baseUrl}company`, companyRouter); // company router
 app.use(`${baseUrl}settings`, settingsRouter); // company router
+app.use(`${baseUrl}notification`, notificationRouter); // notifcation router
 
 app.get("/download-hours-report", async (req, res) => {
   const workbook = new ExcelJS.Workbook();
