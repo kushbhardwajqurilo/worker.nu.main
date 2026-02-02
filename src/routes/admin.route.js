@@ -10,6 +10,8 @@ const {
   getApproveLeaves,
   getReminders,
   getSingleReminder,
+  LeaveFilterController,
+  reminderFilter,
 } = require("../controller/admin/admin.controller");
 const {
   authMiddeware,
@@ -17,75 +19,87 @@ const {
 } = require("../middleware/authMiddleware");
 
 const adminRouter = require("express").Router();
-adminRouter.get(
+adminRouter.post(
   "/holidays",
   authMiddeware,
   accessMiddleware("admin"),
-  getHolidayRequest
+  getHolidayRequest,
 );
 
-adminRouter.get(
+adminRouter.post(
   "/sickness",
   authMiddeware,
   accessMiddleware("admin"),
-  getSicknessRequest
+  getSicknessRequest,
 );
 adminRouter.patch(
   "/approve",
   authMiddeware,
   accessMiddleware("admin"),
-  approveLeaveRequest
+  approveLeaveRequest,
 );
 
 // =================== Reminder ===================
-adminRouter.get(
+adminRouter.post(
   "/reminders",
   authMiddeware,
   accessMiddleware("admin"),
-  getReminders
+  getReminders,
 );
 adminRouter.post(
   "/project-reminder",
   authMiddeware,
   accessMiddleware("admin"),
-  setProjectReminder
+  setProjectReminder,
 );
 adminRouter.put(
   "/edit-reminder",
   authMiddeware,
   accessMiddleware("admin"),
-  editReminder
+  editReminder,
 );
 adminRouter.get(
   "/single-reminder",
   authMiddeware,
   accessMiddleware("admin"),
-  getSingleReminder
+  getSingleReminder,
 );
 adminRouter.delete(
   "/delete-reminder",
   authMiddeware,
   accessMiddleware("admin"),
-  deleteReminder
+  deleteReminder,
 );
 adminRouter.patch(
   "/reject-leave",
   authMiddeware,
   accessMiddleware("admin"),
-  RejectLeaveRequest
+  RejectLeaveRequest,
 );
 adminRouter.delete(
   "/delete-leave",
   authMiddeware,
   accessMiddleware("admin"),
-  DeleteLeaveRequest
+  DeleteLeaveRequest,
 );
 
-adminRouter.get(
+adminRouter.post(
   "/approve-leaves",
   authMiddeware,
   accessMiddleware("admin"),
-  getApproveLeaves
+  getApproveLeaves,
+);
+adminRouter.post(
+  "/leave-filter",
+  authMiddeware,
+  accessMiddleware("admin"),
+  LeaveFilterController,
+);
+adminRouter.post(
+  "/reminder-filter",
+  authMiddeware,
+  accessMiddleware("admin"),
+  reminderFilter,
 );
 
 module.exports = adminRouter;

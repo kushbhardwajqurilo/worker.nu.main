@@ -32,7 +32,8 @@ const companyAliasSchema = new mongoose.Schema({
   },
   isDelete: { type: Boolean, default: false },
 });
-
+companySchema.index({ tenantId: 1 });
+companyAliasSchema.index({ tenantId: 1 });
 const companyModel = mongoose.model("company", companySchema);
 const companyAliasModel = mongoose.model("company_alias", companyAliasSchema);
 module.exports = { companyModel, companyAliasModel };

@@ -28,7 +28,7 @@ projectRouter.post(
   addProjectController,
 ); // add project route
 
-projectRouter.get(
+projectRouter.post(
   "/get-projects",
   authMiddeware,
   accessMiddleware("admin"),

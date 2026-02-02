@@ -61,6 +61,8 @@ const NotificationSchema = new mongoose.Schema({
   type: { type: String, default: null },
   redirectUrl: { type: String, default: null },
 });
+ReminderSchema.index({ tenantId: 1 });
+NotificationSchema.index({ tenantId: 1 });
 const WorkerReminder = mongoose.model("reminder", ReminderSchema);
 const Notification = mongoose.model("Notification", NotificationSchema);
 module.exports = { WorkerReminder, Notification };

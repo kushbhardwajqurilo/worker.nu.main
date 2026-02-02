@@ -19,56 +19,56 @@ settingsRouter.post(
   "/add-position",
   authMiddeware,
   accessMiddleware("admin"),
-  addWorkerPosition
+  addWorkerPosition,
 );
 settingsRouter.get(
   "/get-position",
   authMiddeware,
   accessMiddleware("admin"),
-  getAllPositions
+  getAllPositions,
 );
 settingsRouter.delete(
   "/delete-position",
   authMiddeware,
   accessMiddleware("admin"),
-  deletePosition
+  deletePosition,
 );
 // Holiday & sickness
 settingsRouter.post(
   "/holiday",
   authMiddeware,
   accessMiddleware("admin"),
-  addOrUpdateHolidaySettings
+  addOrUpdateHolidaySettings,
 );
 settingsRouter.post(
   "/sickness",
   authMiddeware,
   accessMiddleware("admin"),
-  addOrUpdateSicknessSettings
+  addOrUpdateSicknessSettings,
 );
 settingsRouter.get(
   "/get-sickness",
   authMiddeware,
   accessMiddleware("admin"),
-  getHolidaySicknessSettings
+  getHolidaySicknessSettings,
 );
 settingsRouter.get(
   "/get-holiday",
   authMiddeware,
   accessMiddleware("admin"),
-  getHolidaySettings
+  getHolidaySettings,
 );
 
 settingsRouter.post(
   "/hour-setting",
   authMiddeware,
   accessMiddleware("admin"),
-  HoursSettingsController
+  HoursSettingsController,
 );
 settingsRouter.get(
   "/get-hour-setting",
   authMiddeware,
   accessMiddleware("admin"),
-  getHoursSettingsControlle
+  getHoursSettingsControlle,
 );
 module.exports = settingsRouter;

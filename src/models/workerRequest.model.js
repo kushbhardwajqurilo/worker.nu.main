@@ -12,20 +12,17 @@ const workerRequestSchema = new mongoose.Schema(
       required: [true, "worker id requried"],
     },
     worker_personal_details: {
-      firstName: { type: Boolean, default: false },
-      lastName: { type: Boolean, default: false },
+      surname: { type: Boolean, default: false },
       phone: { type: Boolean, default: false },
       email: { type: Boolean, default: false },
       date_of_birth: { type: Boolean, default: false },
       address_details: { type: Boolean, default: false },
       tax_identification_number: { type: Boolean, default: false },
-      close_contact: {
-        firstName: { type: Boolean, default: false },
-        lastName: { type: Boolean, default: false },
-        email: { type: Boolean, default: false },
-        phone: { type: Boolean, default: false },
-        profile_picture: { type: Boolean, default: false },
-      },
+
+      firstName: { type: Boolean, default: false },
+      lastName: { type: Boolean, default: false },
+      phone: { type: Boolean, default: false },
+      profile_picture: { type: Boolean, default: false },
     },
     personal_information: {
       upload_docs: {
@@ -50,7 +47,7 @@ const workerRequestSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
-
+workerRequestSchema.index({ tenantId: 1 });
 const workerRequestModel = mongoose.model(
   "worker_request",
   workerRequestSchema,

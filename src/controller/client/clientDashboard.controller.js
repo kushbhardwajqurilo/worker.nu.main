@@ -75,6 +75,7 @@ exports.isClientSign = catchAsync(async (req, res, next) => {
   }
 
   const client = await clientModel.findOne({ _id: client_id, tenantId });
+  // console.log(client);
   const data = {
     _id: client?._id,
     isSign: client?.isSignatured,
@@ -138,7 +139,7 @@ exports.getAllHoursOfWorkerToClientController = catchAsync(
         {
           path: "workerId",
           select:
-            "worker_personal_details.firstName worker_personal_details.lastName worker_position",
+            "worker_personal_details.firstName worker_personal_details.lastName worker_position personal_information.documents.profile_picture",
           populate: {
             path: "worker_position",
             select: "position",
@@ -222,6 +223,8 @@ exports.getAllHoursOfWorkerToClientController = catchAsync(
                 latest.workerId.worker_personal_details?.firstName || "",
               lastName: latest.workerId.worker_personal_details?.lastName || "",
               position: latest.workerId.worker_position?.[0]?.position || "",
+              profile_picture:
+                latest.workerId.personal_information.documents.profile_picture,
             }
           : null,
 

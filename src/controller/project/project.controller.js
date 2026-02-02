@@ -309,20 +309,24 @@ exports.getAllProjectsController = catchAsync(async (req, res, next) => {
     isDelete: false,
   };
 
-  // if (req.body.clientId) {
-  //   query.client = req.body.clientId;
-  // }
+  if (Array.isArray(req.body?.clientIds) && req.body.clientIds.length > 0) {
+    query["client_details.client"] = {
+      $in: req.body.clientIds.map((id) => new mongoose.Types.ObjectId(id)),
+    };
+  }
 
-  // if (req.body.projectId) {
-  //   query._id = req.body.projectId;
-  // }
+  if (Array.isArray(req.body?.projectIds) && req.body.projectIds.length > 0) {
+    query._id = {
+      $in: req.body.projectIds.map((id) => new mongoose.Types.ObjectId(id)),
+    };
+  }
 
-  // if (req.body.status === "Completed") {
-  //   query.is_complete = true;
-  // }
-  // if (req.body.status === "Active") {
-  //   query.is_complete = false;
-  // }
+  if (req.body?.status === "Completed") {
+    query.is_complete = true;
+  }
+  if (req.body?.status === "Active") {
+    query.is_complete = false;
+  }
   const totalCount = await projectMode.countDocuments(query);
 
   if (totalCount === 0) {

@@ -69,7 +69,6 @@ exports.addClient = catchAsync(async (req, res, next) => {
 // get all client list
 exports.getAllClientController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
-
   if (!tenantId) {
     return next(new AppError("Tenant Id missing in headers", 400));
   }
@@ -81,11 +80,11 @@ exports.getAllClientController = catchAsync(async (req, res, next) => {
     tenantId,
     isDelete: false,
   };
-  if (req.query.filter) {
-    if (!mongoose.Types.ObjectId.isValid(req.query.filter)) {
+  if (req.query.clientIds) {
+    if (!mongoose.Types.ObjectId.isValid(req.query.clientIds)) {
       return next(new AppError("Invalid client"));
     }
-    query._id = req.query.filter;
+    query._id = req.query.clientIds;
   }
   const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
   const limit =

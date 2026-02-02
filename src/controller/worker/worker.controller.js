@@ -26,6 +26,7 @@ const {
   createNotification,
 } = require("../notifications/notification.controller");
 const { Notification } = require("../../models/reminder.model");
+const parseDottedObject = require("../../utils/parseObject");
 // ----------------------------------------- ADMIN DASHBOARD API'S -----------------------------------------------
 
 // <---------- Add Worker Start Here ------------>
@@ -309,7 +310,7 @@ exports.addWorker = catchAsync(async (req, res, next) => {
     process.env.WORKER_KEY,
   );
   // ================= DASHBOARD LINK =================
-  worker.dashboardUrl = `https://ql3cm80q-3000.inc1.devtunnels.ms/worker?tkn=${worker_token}`;
+  worker.dashboardUrl = `${process.env.workerDashboardUrl}${worker_token}`;
   worker.urlVisibleToAdmin = true;
   worker.urlAdminExpireAt = Date.now() + 24 * 60 * 60 * 1000;
   const projectList = [];
@@ -1048,46 +1049,40 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
   const limit = parseInt(req.query.limit, 10) || 5;
   const skip = (page - 1) * limit;
 
-  // const {
-  //   workerIds = [],
-  //   projectIds = [],
-  //   status = [],
-  //   workerPositionIds = [],
-  // } = req.body;
-
   // ================= BASE QUERY =================
   const query = {
     tenantId,
     isDelete: { $ne: true },
-    isActive: { $ne: false },
+    isActive: true,
   };
 
   // ================= FILTERS =================
 
-  // // Worker (multiple)
-  // if (Array.isArray(workerIds) && workerIds.length > 0) {
-  //   query._id = { $in: workerIds };
-  // }
+  // Worker (multiple)
+  if (Array.isArray(req.body?.workerIds) && req.body.workerIds.length > 0) {
+    query._id = { $in: req.body.workerIds };
+  }
 
-  // // Status (multiple)
-  // if (Array.isArray(status) && status.length > 0) {
-  //   query.status = { $in: status };
-  // }
+  // ✅ Status (Boolean array)
+  if (typeof req?.body?.status === "boolean") {
+    query.isActive = req.body.status;
+  }
 
-  // // Worker Position (multiple)
-  // if (Array.isArray(workerPositionIds) && workerPositionIds.length > 0) {
-  //   query.worker_position = { $in: workerPositionIds };
-  // }
+  // Worker Position (multiple)
+  if (
+    Array.isArray(req.body?.workerPositionIds) &&
+    req.body.workerPositionIds.length > 0
+  ) {
+    query.worker_position = { $in: req.body.workerPositionIds };
+  }
 
-  // // Project filter (nested array inside worker)
-  // if (Array.isArray(projectIds) && projectIds.length > 0) {
-  //   query["project.projectId"] = { $in: projectIds };
-  // }
-
+  // Project filter (nested)
+  if (Array.isArray(req.body?.projectIds) && req.body.projectIds.length > 0) {
+    query["project.projectId"] = { $in: req.body.projectIds };
+  }
   // ================= COUNT =================
   const totalCount = await workerModel.countDocuments(query);
 
-  // 🔥 VERY IMPORTANT: UI SAFE RESPONSE
   if (totalCount === 0) {
     return sendSuccess(
       res,
@@ -1121,7 +1116,6 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
       true,
     );
   }
-
   // ================= FETCH DATA =================
   const workerList = await workerModel
     .find(query)
@@ -1143,8 +1137,9 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
 
   // ================= FORMAT RESPONSE =================
   const updatedList = workerList.map((worker) => {
-    const isExpired =
-      worker.urlAdminExpireAt && Date.now() > worker.urlAdminExpireAt;
+    // const isExpired =
+    //   worker.urlAdminExpireAt && Date.now() > worker.urlAdminExpireAt;
+    const isExpired = false;
 
     return {
       ...worker,
@@ -1792,7 +1787,7 @@ exports.getWorkerHolidayDetails = catchAsync(async (req, res, next) => {
 // get all hours of worker
 exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
   const { tenantId, worker_id } = req;
-
+  console.log("data", req.body);
   if (!tenantId) {
     return next(new AppError("Tenant missing", 400));
   }
@@ -1818,6 +1813,7 @@ exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
     workerId: worker_id,
   };
 
+  // const
   /* ---------- TOTAL COUNT ---------- */
   const totalHours = await hoursModel.countDocuments(query);
 
@@ -2008,37 +2004,53 @@ exports.requestInformation = catchAsync(async (req, res, next) => {
   }
 
   const { workerId, ...requestInfo } = req.body;
-  const payloadToInsert = [];
+
+  if (!Array.isArray(workerId) || workerId.length === 0) {
+    return next(new AppError("workerId must be an array", 400));
+  }
+
   const notificationPayload = [];
 
-  /* ---------- BUILD PAYLOAD ---------- */
-  if (Array.isArray(workerId)) {
-    for (const id of workerId) {
-      if (!mongoose.Types.ObjectId.isValid(id)) {
-        return next(new AppError(`Invalid workerId: ${id}`, 400));
-      }
-
-      payloadToInsert.push({
-        tenantId,
-        workerId: id,
-        ...requestInfo,
-      });
-      notificationPayload.push({
-        tenantId,
-        title: "Information Request",
-        message: "Please Submit Your Information",
-        userId: id,
-        type: "INFO",
-      });
+  /* ---------- UPSERT REQUEST (REPLACE OR CREATE) ---------- */
+  for (const id of workerId) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return next(new AppError(`Invalid workerId: ${id}`, 400));
     }
-  }
-  const sendRequest = await workerRequestModel.insertMany(payloadToInsert);
-  if (!sendRequest) {
-    return next(new AppError("failed to send request", 400));
+
+    await workerRequestModel.updateOne(
+      { tenantId, workerId: id },
+      {
+        $set: {
+          tenantId,
+          workerId: id,
+          ...requestInfo,
+        },
+      },
+      { upsert: true },
+    );
+
+    notificationPayload.push({
+      tenantId,
+      title: "Information Request",
+      message: "Please Submit Your Information",
+      userId: id,
+      type: "INFO",
+      redirectUrl: process.env.workerInformationUrl,
+    });
   }
 
-  const sentNotication = await Notification.insertMany(notificationPayload);
-  return sendSuccess(res, "Request Send SuccessFull", {}, 200, true);
+  /* ---------- SEND NOTIFICATIONS ---------- */
+  if (notificationPayload.length) {
+    await Notification.insertMany(notificationPayload);
+  }
+
+  return sendSuccess(
+    res,
+    "Request sent successfully (old replaced if existed)",
+    {},
+    200,
+    true,
+  );
 });
 
 // <---------- get request to worker ---------->
@@ -2064,6 +2076,7 @@ exports.getRequestForWorker = catchAsync(async (req, res, next) => {
   };
   const request = await workerRequestModel
     .findOne(payload)
+    .select("-_id -workerId -tenantId -__v -createdAt -updatedAt")
     .sort({ createdAt: -1 });
 
   if (!request) {
@@ -2072,7 +2085,131 @@ exports.getRequestForWorker = catchAsync(async (req, res, next) => {
   return sendSuccess(res, "success", request, 200, true);
 });
 
-// <------ get worker woker image id --------->
+// <------- Update worker details by ---------->
+// const flattenObject = (obj, parentKey = "", result = {}) => {
+//   for (const key in obj) {
+//     const value = obj[key];
+//     const newKey = parentKey ? `${parentKey}.${key}` : key;
+
+//     if (
+//       value &&
+//       typeof value === "object" &&
+//       !Array.isArray(value) &&
+//       !(value instanceof Date)
+//     ) {
+//       if (Object.keys(value).length === 0) continue;
+//       flattenObject(value, newKey, result);
+//     } else {
+//       result[newKey] = value;
+//     }
+//   }
+//   return result;
+// };
+
+// exports.updateWorkerDataToRequest = catchAsync(async (req, res, next) => {
+//   const { tenantId, worker_id } = req;
+//   console.log("body", req.body);
+//   /* ---------------- VALIDATIONS ---------------- */
+//   if (!tenantId) return next(new AppError("Tenant missing", 400));
+//   if (!isValidCustomUUID(tenantId))
+//     return next(new AppError("Invalid Tenant-id", 400));
+//   if (!worker_id) return next(new AppError("Worker id missing", 400));
+//   if (!mongoose.Types.ObjectId.isValid(worker_id))
+//     return next(new AppError("Invalid Worker ID", 400));
+
+//   /* ---------------- BODY & FILES ---------------- */
+//   const body = req.body || {};
+//   const files = Array.isArray(req.files) ? req.files : [];
+
+//   /* ---------------- ENSURE NESTED PATH ---------------- */
+//   // We prepare this structure only if needed — but we won't force it
+//   if (!body.personal_information) {
+//     body.personal_information = {};
+//   }
+//   if (!body.personal_information.documents) {
+//     body.personal_information.documents = {
+//       profile_picture: "",
+//       national_id_card: "",
+//       passport: "",
+//       drivers_license: "",
+//     };
+//   }
+
+//   /* ---------------- FILES → documents ---------------- */
+//   if (files.length > 0) {
+//     files.forEach((file) => {
+//       const docKey = file.fieldname; // profile_picture, passport, aadhar, etc
+//       if (docKey === "profile_picture") {
+//         console.log("profile", file.path);
+//         body.personal_information.documents.profile_picture = file.path;
+//       }
+//       if (docKey === "national_id_card") {
+//         body.personal_information.documents.national_id_card = file.path;
+//       }
+//       if (docKey === "passport") {
+//         body.personal_information.documents.passport = file.path;
+//       }
+//       if (docKey === "drivers_license") {
+//         body.personal_information.documents.drivers_license = file.path;
+//       }
+//     });
+//   }
+
+//   /* ---------------- CLEAN EMPTY VALUES ---------------- */
+//   const cleanEmpty = (obj) => {
+//     Object.keys(obj).forEach((key) => {
+//       const val = obj[key];
+
+//       if (val === "" || val === undefined || val === null) {
+//         delete obj[key];
+//       } else if (val && typeof val === "object" && !Array.isArray(val)) {
+//         cleanEmpty(val);
+//         if (Object.keys(val).length === 0) {
+//           delete obj[key];
+//         }
+//       }
+//     });
+//   };
+//   cleanEmpty(body);
+
+//   /* ---------------- FLATTEN FOR PARTIAL UPDATE ---------------- */
+//   const updateSet = flattenObject(body);
+
+//   // if (Object.keys(updateSet).length === 0) {
+//   //   return next(new AppError("No valid fields to update", 400));
+//   // }
+
+//   // /* ---------------- MONGO UPDATE (THIS IS THE KEY CHANGE) ---------------- */
+//   // const updatedWorker = await workerModel.findOneAndUpdate(
+//   //   {
+//   //     _id: worker_id,
+//   //     tenantId,
+//   //     isDelete: false,
+//   //   },
+//   //   {
+//   //     $set: updateSet, // ← flattened dotted paths = safest partial update
+//   //   },
+//   //   {
+//   //     new: true,
+//   //     runValidators: true, // optional: good for schema validation
+//   //     // timestamps: true,       // if you want updatedAt to refresh
+//   //   },
+//   // );
+
+//   // if (!updatedWorker) {
+//   //   return next(new AppError("Worker not found or access denied", 404));
+//   // }
+
+//   return res.json({
+//     status: true,
+//     message: "Worker updated successfully",
+//     // data: updatedWorker, // ← return full updated document (recommended)
+//     // updatedFields: updateSet   // optional: for debugging
+//   });
+// });
+// <--------- worke request information end ----------->
+
+// <------ get worker identification --------->
 
 exports.getWorkerIdendtity = catchAsync(async (req, res, next) => {
   const { tenantId, worker_id } = req;
@@ -2100,3 +2237,110 @@ exports.getWorkerIdendtity = catchAsync(async (req, res, next) => {
   return sendSuccess(res, "Identification Found", filterData, 200, true);
 });
 // <------ worker request end ------------>
+
+const flattenObject = (obj, parent = "", res = {}) => {
+  for (const key in obj) {
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
+    const val = obj[key];
+    const path = parent ? `${parent}.${key}` : key;
+
+    if (
+      val &&
+      typeof val === "object" &&
+      !Array.isArray(val) &&
+      !(val instanceof Date)
+    ) {
+      if (Object.keys(val).length > 0) {
+        flattenObject(val, path, res);
+      }
+    } else if (val !== "" && val !== undefined && val !== null) {
+      res[path] = val;
+    }
+  }
+  return res;
+};
+
+exports.updateWorkerDataToRequest = catchAsync(async (req, res, next) => {
+  const { tenantId, worker_id } = req;
+
+  console.log("[DEBUG] Raw body keys:", Object.keys(req.body));
+  console.log(
+    "[DEBUG] Files:",
+    req.files?.map((f) => ({
+      fieldname: f.fieldname,
+      originalname: f.originalname,
+      path: f.path || f.location || "—",
+      secure_url: f.secure_url || "—",
+    })) || "no files",
+  );
+
+  // ── Basic validations ───────────────────────────────────
+  if (!tenantId || !isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid or missing tenant", 400));
+  }
+  if (!worker_id || !mongoose.Types.ObjectId.isValid(worker_id)) {
+    return next(new AppError("Invalid worker ID", 400));
+  }
+
+  // ── 1. Parse stringified JSON fields ────────────────────
+  let body = { ...req.body };
+
+  if (body.worker_personal_details) {
+    try {
+      body.worker_personal_details = JSON.parse(body.worker_personal_details);
+    } catch (e) {
+      console.warn("Failed to parse worker_personal_details", e);
+    }
+  }
+
+  if (body.personal_information) {
+    try {
+      body.personal_information = JSON.parse(body.personal_information);
+    } catch (e) {
+      console.warn("Failed to parse personal_information", e);
+    }
+  }
+
+  // ── 2. Handle all uploaded document files ───────────────
+  if (req.files?.length > 0) {
+    // Ensure nested structure only if files exist
+    if (!body.personal_information) body.personal_information = {};
+    if (!body.personal_information.documents) {
+      body.personal_information.documents = {};
+    }
+
+    req.files.forEach((file) => {
+      const key = file.fieldname; // profile_picture, passport, etc.
+      const url = file.secure_url || file.location || file.path;
+
+      if (url) {
+        body.personal_information.documents[key] = url;
+        console.log(`[SET] ${key} → ${url}`);
+      }
+    });
+  }
+
+  // ── 3. Flatten only non-empty values ────────────────────
+  const updateSet = flattenObject(body);
+
+  if (Object.keys(updateSet).length === 0) {
+    return next(new AppError("No valid update data provided", 400));
+  }
+
+  // ── 4. Atomic update ────────────────────────────────────
+  const updated = await workerModel.findOneAndUpdate(
+    { _id: worker_id, tenantId, isDelete: false },
+    { $set: updateSet },
+    { new: true, runValidators: true },
+  );
+
+  if (!updated) {
+    return next(new AppError("Worker not found or access denied", 404));
+  }
+
+  res.json({
+    status: true,
+    message: "Worker updated",
+    data: updated,
+  });
+});

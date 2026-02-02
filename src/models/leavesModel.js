@@ -96,6 +96,8 @@ const sicknessSchema = new mongoose.Schema({
     default: false,
   },
 });
+holidaySchema.index({ tenantId: 1 });
+sicknessSchema.index({ tenantId: 1 });
 const holidayModel = mongoose.model("holiday_leaves", holidaySchema);
 const sicknessModel = mongoose.model("sickness_leaves", sicknessSchema);
 module.exports = { holidayModel, sicknessModel };

@@ -14,6 +14,7 @@ const {
   approveHours,
   approveHoursByWeekRange,
   checkSubmitHoursOnDateForClientWorker,
+  weeklyTimeSheetGenerate,
 } = require("../controller/hours/hours.controller");
 const {
   authMiddeware,
@@ -51,7 +52,7 @@ hoursRouter.get("/single", getSingleHoursDetailsController);
 // example: /hours/single?h_id=12345
 
 /* ---------------- GET ALL HOURS OF WORKER ------------- */
-hoursRouter.get(
+hoursRouter.post(
   "/worker-all",
   clientOrAdminAuthMiddleware,
   accessMiddleware("admin", "client"),
@@ -118,4 +119,13 @@ hoursRouter.post(
   checkSubmitHoursOnDateForClientWorker,
 );
 // <-----end ------->
+
+// <------ weeekly reports start ----------->
+hoursRouter.post(
+  "/worker-weekly-timesheet",
+  clientOrAdminAuthMiddleware,
+  accessMiddleware("client", "admin"),
+  weeklyTimeSheetGenerate,
+);
+// <------ weeekly reports start end ----------->
 module.exports = hoursRouter;

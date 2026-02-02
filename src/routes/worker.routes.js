@@ -22,6 +22,7 @@ const {
   requestInformation,
   getRequestForWorker,
   getWorkerIdendtity,
+  updateWorkerDataToRequest,
 } = require("../controller/worker/worker.controller");
 const {
   authMiddeware,
@@ -59,7 +60,7 @@ workerRouter.delete(
   accessMiddleware("admin"),
   deleteWorkerController,
 ); // delete worker
-workerRouter.get(
+workerRouter.post(
   "/get-all-worker",
   authMiddeware,
   accessMiddleware("admin"),
@@ -138,7 +139,7 @@ workerRouter.get(
   accessMiddleware("worker"),
   getWorkerHolidayDetails,
 );
-workerRouter.get(
+workerRouter.post(
   "/worker-all-hours",
   workerAuthMiddleware,
   accessMiddleware("worker"),
@@ -151,7 +152,8 @@ workerRouter.get(
   LastAndThisWeekTotalHours,
 );
 
-// worker information request
+// <--------- worker information request ---------->
+
 workerRouter.post(
   "/information-request",
   authMiddeware,
@@ -166,8 +168,16 @@ workerRouter.get(
   getRequestForWorker,
 );
 
+workerRouter.post(
+  "/info-data-add",
+  workerAuthMiddleware,
+  accessMiddleware("worker"),
+  uploadDocuments,
+  updateWorkerDataToRequest,
+);
+// <--------- worker information request  End---------->
 workerRouter.get(
-  "/get-worker-identificaiton",
+  "/get-worker-identification",
   workerAuthMiddleware,
   accessMiddleware("worker"),
   getWorkerIdendtity,

@@ -45,7 +45,7 @@ const workerSchema = new mongoose.Schema(
     // ---- language ----
     language: {
       type: [String],
-      enum: ["english", "russian", "lithuanian"],
+      enum: ["english", "russian", "lithuanian", "german", "polish", "dutch"],
     },
     worker_holiday: {
       remaining_holidays: { type: Number, default: 0 },
@@ -130,7 +130,7 @@ const workerSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // ==== WORKER POSITION SCHEMA FIXED ====
@@ -149,12 +149,12 @@ const workerPositionSchema = new mongoose.Schema(
       default: false,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const workerPositionModel = mongoose.model(
   "worker_position",
-  workerPositionSchema
+  workerPositionSchema,
 );
 
 workerSchema.pre("save", async function () {
@@ -172,11 +172,11 @@ workerSchema.pre("save", async function () {
     {
       new: true,
       upsert: true,
-    }
+    },
   );
 
   this.id = `E-${counter.seq}`;
 });
-
+workerSchema.index({ tenantId: 1 });
 const workerModel = mongoose.model("worker", workerSchema);
 module.exports = { workerModel, workerPositionModel };

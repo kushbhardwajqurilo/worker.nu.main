@@ -47,6 +47,7 @@ exports.getNotificationToWorker = catchAsync(async (req, res, next) => {
   };
   const notifications = await Notification.find(payload)
     .select("-tenantId -userId -__v")
+    .sort({ createdAt: -1 })
     .lean();
   if (!notifications) {
     return sendSuccess(res, "No Notification", [], 200, true);

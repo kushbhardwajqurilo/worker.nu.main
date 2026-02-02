@@ -37,15 +37,22 @@ exports.getHolidayRequest = catchAsync(async (req, res, next) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 5, 100);
   const skip = (page - 1) * limit;
 
-  // ================= TOTAL COUNT =================
-  const totalRecords = await holidayModel.countDocuments({
+  const query = {
     tenantId,
     isDelete: false,
-  });
+  };
+  const { w_id } = req.body; // array workerIds
+  let workerObjectIds = [];
+  if (Array.isArray(w_id) && w_id.length > 0) {
+    workerObjectIds = w_id.map((id) => new mongoose.Types.ObjectId(id));
+    query.workerId = { $in: workerObjectIds };
+  }
+  // ================= TOTAL COUNT =================
+  const totalRecords = await holidayModel.countDocuments(query);
 
   // ================= FETCH DATA =================
   const result = await holidayModel
-    .find({ tenantId, isDelete: false })
+    .find(query)
     .sort({ requestedDate: -1 }) // latest first (recommended)
     .skip(skip)
     .limit(limit)
@@ -141,20 +148,27 @@ exports.getSicknessRequest = catchAsync(async (req, res, next) => {
     return next(new AppError("invalid admin", 400));
   }
 
+  const { w_id } = req.body;
   // ================= PAGINATION =================
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
   const limit = Math.min(parseInt(req.query.limit, 10) || 5, 100);
   const skip = (page - 1) * limit;
 
-  // ================= TOTAL COUNT =================
-  const totalRecords = await sicknessModel.countDocuments({
+  const query = {
     tenantId,
     isDelete: false,
-  });
+  };
+  let workerObjectIds = [];
+  if (Array.isArray(w_id) && w_id.length > 0) {
+    workerObjectIds = w_id.map((id) => new mongoose.Types.ObjectId(id));
+    query.workerId = { $in: workerObjectIds };
+  }
+  // ================= TOTAL COUNT =================
+  const totalRecords = await sicknessModel.countDocuments(query);
 
   // ================= FETCH DATA =================
   const result = await sicknessModel
-    .find({ tenantId, isDelete: false })
+    .find(query)
     .sort({ requestedDate: -1 }) // latest first
     .skip(skip)
     .limit(limit)
@@ -378,6 +392,84 @@ function formatDateDDMMYYYY(dateString) {
   return `${day}/${month}/${year}`;
 }
 
+// exports.getReminders = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+
+//   if (!tenantId) {
+//     return next(new AppError("tenant-id missing", 400));
+//   }
+
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid Tenant-id", 400));
+//   }
+
+//   // ================= PAGINATION =================
+//   const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
+//   const limit =
+//     Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 10;
+
+//   const skip = (page - 1) * limit;
+
+//   // ================= TOTAL COUNT =================
+//   const totalReminders = await WorkerReminder.countDocuments({ tenantId });
+
+//   // ================= FETCH DATA =================
+//   const reminders = await WorkerReminder.find({ tenantId })
+//     .populate({
+//       path: "project",
+//       select: "project_details.project_name",
+//     })
+//     .sort({ createdAt: -1 })
+//     .skip(skip)
+//     .limit(limit)
+//     .lean();
+
+//   if (!reminders.length) {
+//     return sendSuccess(
+//       res,
+//       "no reminder found",
+//       {
+//         total: 0,
+//         page,
+//         limit,
+//         totalPages: 0,
+//         reminders: [],
+//       },
+//       200,
+//       true,
+//     );
+//   }
+
+//   // ================= FORMAT RESPONSE =================
+//   const formattedData = reminders.map((val, pos) => ({
+//     s_no: skip + pos + 1,
+//     _id: val._id,
+//     date: formatDateDDMMYYYY(val.date),
+//     title: val.title,
+//     reminderFor: val.reminderFor,
+//     notes: val.note,
+//     isSent: val.isSent,
+//     project: val.project?.map((p) => ({
+//       _id: p._id,
+//       project_name: p.project_details.project_name,
+//     })),
+//   }));
+
+//   return sendSuccess(
+//     res,
+//     "reminder fetched successfully",
+//     {
+//       total: totalReminders,
+//       page,
+//       limit,
+//       totalPages: Math.ceil(totalReminders / limit),
+//       reminders: formattedData,
+//     },
+//     200,
+//     true,
+//   );
+// });
+
 exports.getReminders = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
 
@@ -389,6 +481,8 @@ exports.getReminders = catchAsync(async (req, res, next) => {
     return next(new AppError("Invalid Tenant-id", 400));
   }
 
+  const { w_id } = req.body; // OPTIONAL (array)
+
   // ================= PAGINATION =================
   const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
   const limit =
@@ -396,11 +490,21 @@ exports.getReminders = catchAsync(async (req, res, next) => {
 
   const skip = (page - 1) * limit;
 
+  // ================= BASE QUERY =================
+  const query = { tenantId };
+
+  // ✅ Apply workerId filter ONLY if w_id is provided
+  let workerObjectIds = [];
+  if (Array.isArray(w_id) && w_id.length > 0) {
+    workerObjectIds = w_id.map((id) => new mongoose.Types.ObjectId(id));
+    query.workerId = { $in: workerObjectIds };
+  }
+
   // ================= TOTAL COUNT =================
-  const totalReminders = await WorkerReminder.countDocuments({ tenantId });
+  const totalReminders = await WorkerReminder.countDocuments(query);
 
   // ================= FETCH DATA =================
-  const reminders = await WorkerReminder.find({ tenantId })
+  const reminders = await WorkerReminder.find(query)
     .populate({
       path: "project",
       select: "project_details.project_name",
@@ -427,19 +531,31 @@ exports.getReminders = catchAsync(async (req, res, next) => {
   }
 
   // ================= FORMAT RESPONSE =================
-  const formattedData = reminders.map((val, pos) => ({
-    s_no: skip + pos + 1,
-    _id: val._id,
-    date: formatDateDDMMYYYY(val.date),
-    title: val.title,
-    reminderFor: val.reminderFor,
-    notes: val.note,
-    isSent: val.isSent,
-    project: val.project?.map((p) => ({
-      _id: p._id,
-      project_name: p.project_details.project_name,
-    })),
-  }));
+  const formattedData = reminders.map((val, pos) => {
+    let filteredWorkerId = val.workerId;
+
+    // ✅ Trim workerId array ONLY when filter applied
+    if (workerObjectIds.length > 0) {
+      filteredWorkerId = val.workerId.filter((id) =>
+        workerObjectIds.some((wid) => wid.toString() === id.toString()),
+      );
+    }
+
+    return {
+      s_no: skip + pos + 1,
+      _id: val._id,
+      date: formatDateDDMMYYYY(val.date),
+      title: val.title,
+      reminderFor: val.reminderFor,
+      notes: val.note,
+      isSent: val.isSent,
+      workerId: filteredWorkerId, // 👈 sirf matched ya full
+      project: val.project?.map((p) => ({
+        _id: p._id,
+        project_name: p.project_details.project_name,
+      })),
+    };
+  });
 
   return sendSuccess(
     res,
@@ -827,7 +943,6 @@ exports.DeleteLeaveRequest = catchAsync(async (req, res, next) => {
 exports.getApproveLeaves = catchAsync(async (req, res, next) => {
   const { admin_id, tenantId } = req;
   const { type } = req.query;
-
   /* ---------- BASIC VALIDATION ---------- */
   if (!tenantId) {
     return next(new AppError("tenant-id missing", 400));
@@ -880,6 +995,23 @@ exports.getApproveLeaves = catchAsync(async (req, res, next) => {
     status: "approved",
   };
 
+  let workerObjectIds = [];
+  if (Array.isArray() && req.body?.w_id && req.body?.w_id.length > 0) {
+    workerObjectIds = w_id.map((id) => new mongoose.Types.ObjectId(id));
+    query.workerId = { $in: workerObjectIds };
+  }
+  if (req.body?.date) {
+    const inputDate = new Date(req.body.date.split(",")[0]);
+    const startDate = new Date(inputDate);
+    startDate.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(inputDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    query.requestedDate = {
+      $gte: startDate,
+      $lte: endOfDay,
+    };
+  }
   /* ---------- TOTAL COUNT ---------- */
   const totalRecords = await config.model.countDocuments(query);
 
@@ -961,4 +1093,73 @@ exports.getApproveLeaves = catchAsync(async (req, res, next) => {
     200,
     true,
   );
+});
+
+// < ----------------- Sickness and holiday filter ----------------->
+// filter by worker and date
+
+exports.LeaveFilterController = catchAsync(async (req, res, next) => {
+  const { w_id, date } = req.body;
+  const wid = [...w_id];
+
+  // const
+});
+
+// < ------- remnder filter ----------->
+exports.reminderFilter = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+
+  if (!tenantId) {
+    return next(new AppError("tenant missing", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant", 400));
+  }
+
+  const { w_id } = req.body; // array of workerIds
+
+  if (!Array.isArray(w_id) || w_id.length === 0) {
+    return next(new AppError("workerId array required", 400));
+  }
+
+  // convert string ids to ObjectId
+  const workerIds = w_id.map((id) => new mongoose.Types.ObjectId(id));
+
+  const data = await WorkerReminder.aggregate([
+    {
+      $match: {
+        tenantId,
+        workerId: { $in: workerIds },
+      },
+    },
+    {
+      $project: {
+        tenantId: 1,
+        title: 1,
+        date: 1,
+        reminderFor: 1,
+        note: 1,
+        isSent: 1,
+        project: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        workerId: {
+          $filter: {
+            input: "$workerId",
+            as: "wid",
+            cond: {
+              $in: ["$$wid", workerIds],
+            },
+          },
+        },
+      },
+    },
+  ]);
+
+  if (!data || data.length === 0) {
+    return sendSuccess(res, "reminder not found", [], 200, true);
+  }
+
+  return sendSuccess(res, "success", data, 200, true);
 });

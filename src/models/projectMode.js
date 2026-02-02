@@ -141,7 +141,7 @@ const projectSchema = new mongoose.Schema(
     is_active: { type: Boolean, default: true },
     is_complete: { type: Boolean, default: false },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 projectSchema.pre("save", async function () {
   if (!this.isNew) return;
@@ -150,4 +150,5 @@ projectSchema.pre("save", async function () {
     this.projectId = await generateId();
   }
 });
+projectSchema.index({ tenantId: 1 });
 module.exports = mongoose.model("project", projectSchema);
