@@ -1625,7 +1625,7 @@ exports.getAllPositions = catchAsync(async (req, res, next) => {
     isDelete: { $ne: true },
   });
   if (!result || result.length === 0) {
-    return next(new AppError("Position not found", 200));
+    return sendSuccess(res, "Not Found", [], 200, true);
   }
   const positions = [];
   result.forEach((e, pos) =>
@@ -1787,7 +1787,6 @@ exports.getWorkerHolidayDetails = catchAsync(async (req, res, next) => {
 // get all hours of worker
 exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
   const { tenantId, worker_id } = req;
-  console.log("data", req.body);
   if (!tenantId) {
     return next(new AppError("Tenant missing", 400));
   }
@@ -1812,7 +1811,14 @@ exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
     tenantId,
     workerId: worker_id,
   };
-
+  if (req.body?.startDate && req.body?.end) {
+    console.log("dddd");
+    const input = new Date(req.body.startDate);
+    const sec_input = new Date(req.body.end);
+    const startOfDay = input.setHours(0, 0, 0, 0);
+    const endOfDay = sec_input.setHours(23, 59, 59, 999);
+    query.createdAt = { $gte: startOfDay, $lte: endOfDay };
+  }
   // const
   /* ---------- TOTAL COUNT ---------- */
   const totalHours = await hoursModel.countDocuments(query);
@@ -1847,8 +1853,10 @@ exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
 
   /* ---------- HELPER ---------- */
   function calculateTotalHours(start, end) {
-    const startTime = start.hours * 60 + start.minutes;
-    const endTime = end.hours * 60 + end.minutes;
+    const startTime =
+      start?.shift_start_time?.hours * 60 + start?.shift_start_time?.minutes;
+    const endTime =
+      end?.shift_end_time?.hours * 60 + end?.shift_end_time?.minutes;
     const diffMinutes = endTime - startTime;
     return `${Math.floor(diffMinutes / 60)}h:${diffMinutes % 60}m`;
   }

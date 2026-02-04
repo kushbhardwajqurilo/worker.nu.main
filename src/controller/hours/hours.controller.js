@@ -166,9 +166,10 @@ const axios = require("axios");
 const { isValidCustomUUID } = require("custom-uuid-generator");
 const calculateLateByProjectEnd = require("../../utils/calculateLate");
 const calculateLateHoursByDate = require("../../utils/weekLateCount");
+const generateTimesheetPDFBuffer = require("../../utils/generateTimeSheetPdf");
 const clientModel = require("../../models/clientModel");
 const adminModel = require("../../models/authmodel/adminModel");
-const generateTimesheetPDF = require("../../utils/generateTimeSheetPdf");
+const calculateEvaluation = require("../../utils/calculateEvaluation");
 
 exports.createWorkerHours = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
@@ -564,6 +565,230 @@ exports.getSingleHoursDetailsController = catchAsync(async (req, res, next) => {
 //   );
 // });
 
+// exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+
+//   /* ---------- TENANT VALIDATION ---------- */
+//   if (!tenantId) {
+//     return next(new AppError("Tenant Id missing in headers", 400));
+//   }
+
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid Tenant-Id", 400));
+//   }
+
+//   /* ---------- PAGINATION ---------- */
+//   const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
+//   const limit =
+//     Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 10;
+//   const skip = (page - 1) * limit;
+
+//   /* ---------- CURRENT WEEK (MON–SUN) ---------- */
+//   const today = new Date();
+//   const day = today.getDay() === 0 ? 7 : today.getDay();
+
+//   const weekStart = new Date(today);
+//   weekStart.setDate(today.getDate() - day + 1);
+//   weekStart.setHours(0, 0, 0, 0);
+
+//   const weekEnd = new Date(weekStart);
+//   weekEnd.setDate(weekStart.getDate() + 6);
+//   weekEnd.setHours(23, 59, 59, 999);
+
+//   /* ---------- BUILD QUERY ---------- */
+//   const query = { tenantId };
+
+//   /* DATE FILTER */
+//   if (req.body?.date) {
+//     const inputDate = new Date(req.body.date);
+
+//     const startOfDay = new Date(inputDate);
+//     startOfDay.setHours(0, 0, 0, 0);
+
+//     const endOfDay = new Date(inputDate);
+//     endOfDay.setHours(23, 59, 59, 999);
+
+//     query.createdAt = {
+//       $gte: startOfDay,
+//       $lte: endOfDay,
+//     };
+//   } else {
+//     query.createdAt = {
+//       $gte: weekStart,
+//       $lte: weekEnd,
+//     };
+//   }
+
+//   /* STATUS FILTER */
+//   if (req.body?.status) {
+//     query.status = req.body.status;
+//   }
+
+//   /* WORKER FILTER */
+//   if (Array.isArray(req.body?.workerIds) && req.body.workerIds.length > 0) {
+//     query.workerId = {
+//       $in: req.body.workerIds.map((id) => new mongoose.Types.ObjectId(id)),
+//     };
+//   }
+
+//   /* PROJECT FILTER */
+//   if (Array.isArray(req.body?.projectIds) && req.body.projectIds.length > 0) {
+//     query["project.projectId"] = {
+//       $in: req.body.projectIds.map((id) => new mongoose.Types.ObjectId(id)),
+//     };
+//   }
+
+//   /* ---------- FETCH DATA ---------- */
+//   const hoursData = await hoursModel
+//     .find(query)
+//     .populate([
+//       {
+//         path: "project.projectId",
+//         select: "project_details.project_name",
+//       },
+//       {
+//         path: "workerId",
+//         select:
+//           "worker_personal_details.firstName worker_personal_details.lastName worker_position personal_information.documents.profile_picture",
+//         populate: {
+//           path: "worker_position",
+//           select: "position",
+//         },
+//       },
+//     ])
+//     .sort({ createdAt: -1 })
+//     .lean();
+
+//   /* ---------- WORKER MAP (LATEST + LATE CHECK) ---------- */
+//   const workerMap = new Map();
+
+//   for (const item of hoursData) {
+//     const workerKey = item.workerId?._id?.toString();
+//     if (!workerKey) continue;
+
+//     const lateResult = calculateLateHoursByDate({
+//       projectDate: item.project?.project_date,
+//       finishHours: item.finish_hours,
+//       submittedAt: item.createdAt,
+//       dayOff: item.day_off,
+//       graceMinutes: 0,
+//     });
+
+//     if (!workerMap.has(workerKey)) {
+//       workerMap.set(workerKey, {
+//         latest: item,
+//         is_late: lateResult.isLate,
+//         late_minutes: lateResult.lateMinutes,
+//         late_time: lateResult.lateTime,
+//       });
+//     } else {
+//       const existing = workerMap.get(workerKey);
+
+//       if (lateResult.isLate) {
+//         existing.is_late = true;
+
+//         if (lateResult.lateMinutes > existing.late_minutes) {
+//           existing.late_minutes = lateResult.lateMinutes;
+//           existing.late_time = lateResult.lateTime;
+//         }
+//       }
+//     }
+//   }
+
+//   /* ---------- HOURS FORMATTER ---------- */
+//   const formatHours = (decimalHours = 0) => {
+//     const hours = Math.floor(decimalHours);
+//     const minutes = Math.round((decimalHours - hours) * 60);
+
+//     return {
+//       decimal: decimalHours.toFixed(2),
+//       hours,
+//       minutes,
+//       label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
+//     };
+//   };
+
+//   /* ---------- WEEK RANGE LABEL ---------- */
+//   const formatWeekRangeLabel = (startDate, endDate) => {
+//     const options = { day: "numeric", month: "short" };
+//     return `${new Date(startDate).toLocaleDateString(
+//       "en-IN",
+//       options,
+//     )} - ${new Date(endDate).toLocaleDateString(
+//       "en-IN",
+//       options,
+//     )} ${new Date(endDate).getFullYear()}`;
+//   };
+
+//   /* ---------- TRANSFORM DATA ---------- */
+//   const transformedData = Array.from(workerMap.values()).map(
+//     ({ latest, is_late, late_minutes, late_time }) => ({
+//       _id: latest._id,
+//       tenantId: latest.tenantId,
+
+//       worker: latest.workerId
+//         ? {
+//             _id: latest.workerId._id,
+//             firstName: latest.workerId.worker_personal_details?.firstName || "",
+//             lastName: latest.workerId.worker_personal_details?.lastName || "",
+//             position: latest.workerId.worker_position?.[0]?.position || "",
+//             profile_picture:
+//               latest.workerId.personal_information.documents.profile_picture,
+//           }
+//         : null,
+
+//       project: latest.project?.projectId
+//         ? {
+//             _id: latest.project.projectId._id,
+//             project_name:
+//               latest.project.projectId.project_details?.project_name || "",
+//             project_date: latest.project.project_date,
+//           }
+//         : null,
+
+//       weekNumber: latest.weekNumber,
+//       status: latest.status,
+//       start_working_hours: latest.start_working_hours,
+//       finish_hours: latest.finish_hours,
+//       break_time: latest.break_time,
+//       comments: latest.comments,
+//       image: latest.image,
+//       createdAt: latest.createdAt,
+//       updatedAt: latest.updatedAt,
+//       createdBy: latest.createdBy || "",
+//       total_hours: formatHours(latest.total_hours),
+
+//       is_late,
+//       late_time,
+//       late_minutes,
+
+//       weekRange: {
+//         startDate: weekStart.toISOString().split("T")[0],
+//         endDate: weekEnd.toISOString().split("T")[0],
+//         label: formatWeekRangeLabel(weekStart, weekEnd),
+//       },
+//     }),
+//   );
+
+//   /* ---------- PAGINATION ---------- */
+//   const paginatedData = transformedData.slice(skip, skip + limit);
+
+//   /* ---------- RESPONSE ---------- */
+//   return sendSuccess(
+//     res,
+//     "Current week worker hours fetched successfully",
+//     {
+//       total: transformedData.length,
+//       page,
+//       limit,
+//       totalPages: Math.ceil(transformedData.length / limit),
+//       data: paginatedData,
+//     },
+//     200,
+//     true,
+//   );
+// });
+
 exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
 
@@ -598,13 +823,14 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
   const query = { tenantId };
 
   /* DATE FILTER */
-  if (req.body?.date) {
-    const inputDate = new Date(req.body.date);
+  if (Array.isArray(req.body?.date) && req.body?.date.length > 0) {
+    const startDate = new Date(req.body.date[0]);
+    const endDate = new Date(req.body?.date[1]);
 
-    const startOfDay = new Date(inputDate);
+    const startOfDay = new Date(startDate);
     startOfDay.setHours(0, 0, 0, 0);
 
-    const endOfDay = new Date(inputDate);
+    const endOfDay = new Date(endDate);
     endOfDay.setHours(23, 59, 59, 999);
 
     query.createdAt = {
@@ -1049,6 +1275,158 @@ exports.approveHours = catchAsync(async (req, res, next) => {
 
 // <------- dahsboard hours --------->
 
+// exports.dashboardHours = catchAsync(async (req, res, next) => {
+//   const { tenantId, client_id } = req;
+
+//   if (!tenantId) {
+//     return next(new AppError("Tenant Id missing in headers", 400));
+//   }
+
+//   const now = new Date();
+
+//   /* ---------- DATE RANGES ---------- */
+
+//   // Current Month
+//   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+//   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+//   // Last Month
+//   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+//   const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+//   /* ---------- CLIENT → PROJECT → WORKERS ---------- */
+
+//   const clientProjects = await projectMode
+//     .find({
+//       tenantId,
+//       "client_details.client": client_id,
+//     })
+//     .select("project_workers.workers")
+//     .lean();
+
+//   // collect worker ids
+//   let worker_ids = clientProjects.flatMap(
+//     (p) => p.project_workers?.workers || [],
+//   );
+
+//   // remove duplicates + ensure ObjectId
+//   worker_ids = [...new Set(worker_ids.map((id) => id.toString()))].map(
+//     (id) => new mongoose.Types.ObjectId(id),
+//   );
+
+//   if (worker_ids.length === 0) {
+//     return sendSuccess(
+//       res,
+//       "success",
+//       {
+//         monthly_hours: {
+//           title: "total hours this month",
+//           total: "0.00h",
+//           last_month: "0.00h",
+//           evaluation: {
+//             type: "good",
+//             value: "0%",
+//           },
+//         },
+//       },
+//       200,
+//       true,
+//     );
+//   }
+
+//   const [pendingResult, currentMonthResult, lastMonthResult] =
+//     await Promise.all([
+//       hoursModel.aggregate([
+//         {
+//           $match: {
+//             tenantId,
+//             workerId: { $in: worker_ids },
+//             status: "pending",
+//           },
+//         },
+//         {
+//           $group: {
+//             _id: null,
+//             total: { $sum: { $ifNull: ["$total_hours", 0] } },
+//             pendingCount: { $sum: 1 },
+//           },
+//         },
+//       ]),
+
+//       hoursModel.aggregate([
+//         {
+//           $match: {
+//             tenantId,
+//             workerId: { $in: worker_ids }, // ✅ FIXED
+//             createdAt: { $gte: startOfMonth, $lt: endOfMonth },
+//             status: "approved",
+//           },
+//         },
+//         {
+//           $group: {
+//             _id: null,
+//             total: { $sum: { $ifNull: ["$total_hours", 0] } },
+//           },
+//         },
+//       ]),
+
+//       hoursModel.aggregate([
+//         {
+//           $match: {
+//             tenantId,
+//             workerId: { $in: worker_ids }, // ✅ FIXED
+//             createdAt: { $gte: startOfLastMonth, $lt: endOfLastMonth },
+//             status: "approved",
+//           },
+//         },
+//         {
+//           $group: {
+//             _id: null,
+//             total: { $sum: { $ifNull: ["$total_hours", 0] } },
+//           },
+//         },
+//       ]),
+//     ]);
+
+//   /* ---------- VALUES ---------- */
+//   const pendingHours = pendingResult[0]?.total || 0;
+//   const pendingCount = pendingResult[0]?.pendingCount || 0;
+//   const currentMonthHours = currentMonthResult[0]?.total || 0;
+//   const lastMonthHours = lastMonthResult[0]?.total || 0;
+
+//   /* ---------- 4️⃣ Percentage Hike (clamped) ---------- */
+//   let hikePercentage = 0;
+//   let isUp = true;
+
+//   if (lastMonthHours > 0) {
+//     const rawPercentage =
+//       ((currentMonthHours - lastMonthHours) / lastMonthHours) * 100;
+
+//     // clamp between -100 and +100
+//     hikePercentage = Math.max(-100, Math.min(rawPercentage, 100));
+//     isUp = hikePercentage >= 0;
+//   }
+
+//   /* ---------- RESPONSE FORMAT ---------- */
+//   const formatedData = {
+//     monthly_hours: {
+//       title: "total hours this month",
+//       total: `${currentMonthHours.toFixed(2)}h`,
+//       last_month: `${lastMonthHours.toFixed(2)}h`,
+//       evaluation: {
+//         type: isUp ? "good" : "bad",
+//         value: `${hikePercentage.toFixed(2)}%`,
+//       },
+//     },
+//     pending: {
+//       pending_hours: `${pendingHours.toFixed(2)}h`,
+//       worker_pending: pendingCount,
+//     },
+//   };
+
+//   return sendSuccess(res, "success", formatedData, 200, true);
+// });
+
 exports.dashboardHours = catchAsync(async (req, res, next) => {
   const { tenantId, client_id } = req;
 
@@ -1058,37 +1436,31 @@ exports.dashboardHours = catchAsync(async (req, res, next) => {
 
   const now = new Date();
 
-  /* ---------- DATE RANGES ---------- */
-
-  // Current Month
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  // Last Month
   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  /* ---------- CLIENT → PROJECT → WORKERS ---------- */
+  const workersResult = await projectMode.aggregate([
+    {
+      $match: {
+        tenantId,
+        "client_details.client": client_id,
+      },
+    },
+    { $unwind: "$project_workers.workers" },
+    {
+      $group: {
+        _id: null,
+        workers: { $addToSet: "$project_workers.workers" },
+      },
+    },
+  ]);
 
-  const clientProjects = await projectMode
-    .find({
-      tenantId,
-      "client_details.client": client_id,
-    })
-    .select("project_workers.workers")
-    .lean();
+  const workerIds = workersResult[0]?.workers || [];
 
-  // collect worker ids
-  let worker_ids = clientProjects.flatMap(
-    (p) => p.project_workers?.workers || [],
-  );
-
-  // remove duplicates + ensure ObjectId
-  worker_ids = [...new Set(worker_ids.map((id) => id.toString()))].map(
-    (id) => new mongoose.Types.ObjectId(id),
-  );
-
-  if (worker_ids.length === 0) {
+  if (workerIds.length === 0) {
     return sendSuccess(
       res,
       "success",
@@ -1097,10 +1469,11 @@ exports.dashboardHours = catchAsync(async (req, res, next) => {
           title: "total hours this month",
           total: "0.00h",
           last_month: "0.00h",
-          evaluation: {
-            type: "good",
-            value: "0%",
-          },
+          evaluation: { type: "good", value: "0%" },
+        },
+        pending: {
+          pending_hours: "0.00h",
+          worker_pending: 0,
         },
       },
       200,
@@ -1108,94 +1481,461 @@ exports.dashboardHours = catchAsync(async (req, res, next) => {
     );
   }
 
-  /* ---------- 1️⃣ Pending Hours ---------- */
-  const pendingResult = await hoursModel.aggregate([
+  const hoursResult = await hoursModel.aggregate([
     {
       $match: {
         tenantId,
-        workerId: { $in: worker_ids },
-        status: "pending",
+        workerId: { $in: workerIds },
+        createdAt: { $gte: startOfLastMonth, $lt: endOfMonth },
       },
     },
     {
-      $group: {
-        _id: null,
-        total: { $sum: { $ifNull: ["$total_hours", 0] } },
+      $facet: {
+        currentMonth: [
+          {
+            $match: {
+              status: "approved",
+              createdAt: { $gte: startOfMonth, $lt: endOfMonth },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: { $ifNull: ["$total_hours", 0] } },
+            },
+          },
+        ],
+
+        lastMonth: [
+          {
+            $match: {
+              status: "approved",
+              createdAt: { $gte: startOfLastMonth, $lt: endOfLastMonth },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: { $ifNull: ["$total_hours", 0] } },
+            },
+          },
+        ],
+
+        pending: [
+          {
+            $match: { status: "pending" },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: { $ifNull: ["$total_hours", 0] } },
+              count: { $sum: 1 },
+            },
+          },
+        ],
       },
     },
   ]);
 
-  /* ---------- 2️⃣ Current Month Approved Hours ---------- */
-  const currentMonthResult = await hoursModel.aggregate([
+  const data = hoursResult[0] || {};
+
+  const currentMonthHours = data.currentMonth?.[0]?.total || 0;
+  const lastMonthHours = data.lastMonth?.[0]?.total || 0;
+  const pendingHours = data.pending?.[0]?.total || 0;
+  const pendingCount = data.pending?.[0]?.count || 0;
+
+  const evaluation = calculateEvaluation(currentMonthHours, lastMonthHours);
+
+  return sendSuccess(
+    res,
+    "success",
     {
-      $match: {
-        tenantId,
-        workerId: { $in: worker_ids }, // ✅ FIXED
-        createdAt: { $gte: startOfMonth, $lt: endOfMonth },
-        status: "approved",
+      monthly_hours: {
+        title: "total hours this month",
+        total: `${currentMonthHours.toFixed(2)}h`,
+        last_month: `${lastMonthHours.toFixed(2)}h`,
+        evaluation,
+      },
+      pending: {
+        pending_hours: `${pendingHours.toFixed(2)}h`,
+        worker_pending: pendingCount,
       },
     },
-    {
-      $group: {
-        _id: null,
-        total: { $sum: { $ifNull: ["$total_hours", 0] } },
-      },
-    },
-  ]);
-
-  /* ---------- 3️⃣ Last Month Approved Hours ---------- */
-  const lastMonthResult = await hoursModel.aggregate([
-    {
-      $match: {
-        tenantId,
-        workerId: { $in: worker_ids }, // ✅ FIXED
-        createdAt: { $gte: startOfLastMonth, $lt: endOfLastMonth },
-        status: "approved",
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        total: { $sum: { $ifNull: ["$total_hours", 0] } },
-      },
-    },
-  ]);
-
-  /* ---------- VALUES ---------- */
-  const pendingHours = pendingResult[0]?.total || 0;
-  const currentMonthHours = currentMonthResult[0]?.total || 0;
-  const lastMonthHours = lastMonthResult[0]?.total || 0;
-
-  /* ---------- 4️⃣ Percentage Hike (clamped) ---------- */
-  let hikePercentage = 0;
-  let isUp = true;
-
-  if (lastMonthHours > 0) {
-    const rawPercentage =
-      ((currentMonthHours - lastMonthHours) / lastMonthHours) * 100;
-
-    // clamp between -100 and +100
-    hikePercentage = Math.max(-100, Math.min(rawPercentage, 100));
-    isUp = hikePercentage >= 0;
-  }
-
-  /* ---------- RESPONSE FORMAT ---------- */
-  const formatedData = {
-    monthly_hours: {
-      title: "total hours this month",
-      total: `${currentMonthHours.toFixed(2)}h`,
-      last_month: `${lastMonthHours.toFixed(2)}h`,
-      evaluation: {
-        type: isUp ? "good" : "bad",
-        value: `${hikePercentage.toFixed(2)}%`,
-      },
-    },
-    pending_hours: `${pendingHours.toFixed(2)}h`,
-  };
-
-  return sendSuccess(res, "success", formatedData, 200, true);
+    200,
+    true,
+  );
 });
 
+// <---------- admin dashobard stats ------------>
+// exports.addminDashboardStats = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+//   if (!tenantId || !isValidCustomUUID(tenantId)) {
+//     return next(new AppError("tenant Invalid", 400));
+//   }
+//   const now = new Date();
+//   // current month
+//   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+//   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+//   // Last Month
+//   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+//   const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+//   const [current_hours_data, project_data, active_worker] = await Promise.all([
+//     //  total approve hours current month
+//     hoursModel.aggregate([
+//       {
+//         $match: {
+//           tenantId,
+//           createdAt: {
+//             $gte: startOfLastMonth,
+//             $lt: endOfMonth,
+//           },
+//         },
+//       },
+//       {
+//         $facet: {
+//           currentMonth: [
+//             {
+//               $match: {
+//                 createdAt: {
+//                   $gte: startOfMonth,
+//                   $lt: endOfMonth,
+//                 },
+//               },
+//             },
+//             {
+//               $group: {
+//                 _id: null,
+//                 approvedHours: {
+//                   $sum: {
+//                     $cond: [
+//                       { $eq: ["$status", "approved"] },
+//                       { $ifNull: ["$total_hours", 0] },
+//                       0,
+//                     ],
+//                   },
+//                 },
+//               },
+//             },
+//           ],
+
+//           lastMonth: [
+//             {
+//               $match: {
+//                 createdAt: {
+//                   $gte: startOfLastMonth,
+//                   $lt: endOfLastMonth,
+//                 },
+//               },
+//             },
+//             {
+//               $group: {
+//                 _id: null,
+//                 approvedHours: {
+//                   $sum: {
+//                     $cond: [
+//                       { $eq: ["$status", "approved"] },
+//                       { $ifNull: ["$total_hours", 0] },
+//                       0,
+//                     ],
+//                   },
+//                 },
+//               },
+//             },
+//           ],
+//         },
+//       },
+//     ]),
+
+//     // project data last and current month
+//     projectMode.aggregate([
+//       {
+//         $match: {
+//           tenantId,
+//         },
+//       },
+//       {
+//         $facet: {
+//           //  Active projects in current month
+//           currentMonthActive: [
+//             {
+//               $match: {
+//                 is_complete: false,
+//               },
+//             },
+//             {
+//               $count: "count",
+//             },
+//           ],
+
+//           // Projects completed in last month
+//           lastMonthCompleted: [
+//             {
+//               $match: {
+//                 is_complete: true,
+//                 completedAt: {
+//                   $gte: startOfLastMonth,
+//                   $lt: endOfLastMonth,
+//                 },
+//               },
+//             },
+//             {
+//               $count: "count",
+//             },
+//           ],
+//         },
+//       },
+//     ]),
+
+//     //  worker count in current and last monnth
+//     projectMode.aggregate([
+//       {
+//         $match: { tenantId },
+//       },
+//       {
+//         $facet: {
+//           //  Current active workers
+//           currentActiveWorkers: [
+//             {
+//               $match: {
+//                 is_complete: false,
+//               },
+//             },
+//             { $unwind: "$project_workers.workers" },
+//             {
+//               $group: {
+//                 _id: null,
+//                 workers: { $addToSet: "$project_workers.workers" },
+//               },
+//             },
+//             {
+//               $project: {
+//                 _id: 0,
+//                 count: { $size: "$workers" },
+//               },
+//             },
+//           ],
+
+//           //  Last month active workers (from completed projects)
+//           lastMonthActiveWorkers: [
+//             {
+//               $match: {
+//                 is_complete: true,
+//                 completedAt: {
+//                   $gte: startOfLastMonth,
+//                   $lt: endOfLastMonth,
+//                 },
+//               },
+//             },
+//             { $unwind: "$project_workers.workers" },
+//             {
+//               $group: {
+//                 _id: null,
+//                 workers: { $addToSet: "$project_workers.workers" },
+//               },
+//             },
+//             {
+//               $project: {
+//                 _id: 0,
+//                 count: { $size: "$workers" },
+//               },
+//             },
+//           ],
+//         },
+//       },
+//     ]),
+//   ]);
+//   const currentHours =
+//     current_hours_data[0]?.currentMonth[0]?.approvedHours || 0;
+
+//   const lastMonthHours =
+//     current_hours_data[0]?.lastMonth[0]?.approvedHours || 0;
+
+//   const currentProjects = project_data[0]?.currentMonthActive[0]?.count || 0;
+
+//   const lastMonthProjects = project_data[0]?.lastMonthCompleted[0]?.count || 0;
+//   const filterdData = [
+//     {
+//       total: `${currentHours}h`,
+//       last_month: `${lastMonthHours}h`,
+//       evaluation: calculateEvaluation(currentHours, lastMonthHours),
+//     },
+//     {
+//       total: `${currentProjects}`,
+//       last_month: `${lastMonthProjects}`,
+//       evaluation: calculateEvaluation(currentProjects, lastMonthProjects),
+//     },
+//   ];
+
+//   return sendSuccess(res, "success", filterdData, 200, true);
+//   // res.json({ current_hours_data, project_data });
+// });
+
+exports.addminDashboardStats = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  if (!tenantId || !isValidCustomUUID(tenantId)) {
+    return next(new AppError("tenant Invalid", 400));
+  }
+
+  const now = new Date();
+
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const [hoursData, projectStats] = await Promise.all([
+    // 🕒 HOURS (single scan)
+    hoursModel.aggregate([
+      {
+        $match: {
+          tenantId,
+          status: "approved",
+          createdAt: { $gte: startOfLastMonth, $lt: endOfMonth },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            month: {
+              $cond: [
+                {
+                  $and: [
+                    { $gte: ["$createdAt", startOfMonth] },
+                    { $lt: ["$createdAt", endOfMonth] },
+                  ],
+                },
+                "current",
+                "last",
+              ],
+            },
+          },
+          hours: { $sum: { $ifNull: ["$total_hours", 0] } },
+        },
+      },
+    ]),
+
+    // 📦 PROJECT + WORKER (single scan)
+    projectMode.aggregate([
+      {
+        $match: { tenantId },
+      },
+      {
+        $facet: {
+          projects: [
+            {
+              $group: {
+                _id: {
+                  type: {
+                    $cond: [
+                      { $eq: ["$is_complete", false] },
+                      "current",
+                      {
+                        $cond: [
+                          {
+                            $and: [
+                              { $eq: ["$is_complete", true] },
+                              { $gte: ["$completedAt", startOfLastMonth] },
+                              { $lt: ["$completedAt", endOfLastMonth] },
+                            ],
+                          },
+                          "last",
+                          null,
+                        ],
+                      },
+                    ],
+                  },
+                },
+                count: { $sum: 1 },
+              },
+            },
+          ],
+
+          workers: [
+            { $unwind: "$project_workers.workers" },
+            {
+              $group: {
+                _id: {
+                  worker: "$project_workers.workers",
+                  type: {
+                    $cond: [
+                      { $eq: ["$is_complete", false] },
+                      "current",
+                      {
+                        $cond: [
+                          {
+                            $and: [
+                              { $eq: ["$is_complete", true] },
+                              {
+                                $gte: ["$completedAt", startOfLastMonth],
+                              },
+                              { $lt: ["$completedAt", endOfLastMonth] },
+                            ],
+                          },
+                          "last",
+                          null,
+                        ],
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+            {
+              $group: {
+                _id: "$_id.type",
+                count: { $sum: 1 },
+              },
+            },
+          ],
+        },
+      },
+    ]),
+  ]);
+
+  // 🧠 Normalize hours
+  const currentHours =
+    hoursData.find((d) => d._id.month === "current")?.hours || 0;
+  const lastMonthHours =
+    hoursData.find((d) => d._id.month === "last")?.hours || 0;
+
+  // 🧠 Normalize projects
+  const projectCounts = projectStats[0]?.projects || [];
+  const currentProjects =
+    projectCounts.find((p) => p._id.type === "current")?.count || 0;
+  const lastMonthProjects =
+    projectCounts.find((p) => p._id.type === "last")?.count || 0;
+
+  const workerCounts = projectStats[0]?.workers || [];
+
+  const currentWorkers =
+    workerCounts.find((w) => w._id === "current")?.count || 0;
+
+  const lastMonthWorkers =
+    workerCounts.find((w) => w._id === "last")?.count || 0;
+  const response = [
+    {
+      total: `${currentHours}h`,
+      last_month: `${lastMonthHours}h`,
+      evaluation: calculateEvaluation(currentHours, lastMonthHours),
+    },
+    {
+      total: `${currentProjects}`,
+      last_month: `${lastMonthProjects}`,
+      evaluation: calculateEvaluation(currentProjects, lastMonthProjects),
+    },
+    {
+      total: `${currentWorkers}`,
+      last_month: `${lastMonthWorkers}`,
+      evaluation: calculateEvaluation(currentWorkers, lastMonthWorkers),
+    },
+  ];
+
+  return sendSuccess(res, "success", response, 200, true);
+});
+
+// <---------- admin dashboard stats end ---------->
 // <------ dashboard hours end ---------->
 
 // <-------- dashboard hours like total hours this month, active project this month and active worker this month ------->
@@ -1435,43 +2175,82 @@ exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
   const { p_id, w_id, status, date } = req.body;
 
   if (!tenantId) return next(new AppError("Tenant-id missing", 400));
-  if (!p_id || !mongoose.Types.ObjectId.isValid(p_id))
+  if (!Array.isArray(p_id) || !p_id.length)
     return next(new AppError("Invalid Project Id", 400));
-  if (!Array.isArray(w_id) || w_id.length === 0)
+  if (!Array.isArray(w_id) || !w_id.length)
     return next(new AppError("Worker Ids missing", 400));
   if (!status) return next(new AppError("Status missing", 400));
-  if (!date || !date.start || !date.end)
+  if (!date?.start || !date?.end)
     return next(new AppError("Date range missing", 400));
 
   /* ---------- DATE RANGE ---------- */
+
   const startDate = new Date(date.start);
   startDate.setHours(0, 0, 0, 0);
 
   const endDate = new Date(date.end);
   endDate.setHours(23, 59, 59, 999);
 
-  /* ---------- QUERY ---------- */
-  const [hoursData, client, organization] = await Promise.all([
-    hoursModel
-      .find({
-        tenantId,
-        workerId: { $in: w_id },
-        "project.projectId": p_id,
-        status,
-        "project.project_date": { $gte: startDate, $lte: endDate },
-      })
-      .populate({
-        path: "workerId",
-        select: "worker_personal_details signature",
-        populate: {
-          path: "worker_position",
-          select: "position",
-        },
-      })
-      .lean(),
+  /* ---------- DB FETCH ---------- */
 
+  const [hoursData, projectData, organization] = await Promise.all([
+    // 🔥 aggregation instead of populate
+    hoursModel.aggregate([
+      {
+        $match: {
+          tenantId,
+          workerId: { $in: w_id.map((id) => new mongoose.Types.ObjectId(id)) },
+          "project.projectId": {
+            $in: p_id.map((id) => new mongoose.Types.ObjectId(id)),
+          },
+          status,
+          "project.project_date": { $gte: startDate, $lte: endDate },
+        },
+      },
+
+      // Worker join
+      {
+        $lookup: {
+          from: "workers",
+          localField: "workerId",
+          foreignField: "_id",
+          as: "worker",
+        },
+      },
+      { $unwind: "$worker" },
+
+      // Position join
+      {
+        $lookup: {
+          from: "positions",
+          localField: "worker.worker_position",
+          foreignField: "_id",
+          as: "position",
+        },
+      },
+
+      {
+        $project: {
+          workerId: 1,
+          project: 1,
+          weekNumber: 1,
+          status: 1,
+          start_working_hours: 1,
+          finish_hours: 1,
+          total_hours: 1,
+
+          worker_personal_details: "$worker.worker_personal_details",
+          worker_signature: "$worker.signature",
+          worker_position: {
+            $arrayElemAt: ["$position.position", 0],
+          },
+        },
+      },
+    ]),
+
+    // project + client
     projectMode
-      .findOne({ _id: p_id, tenantId })
+      .findOne({ _id: p_id[0], tenantId })
       .populate({
         path: "client_details.client",
         select: "client_details clientSignature",
@@ -1484,7 +2263,7 @@ exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
     adminModel.findOne({ tenantId }).select("company_name").lean(),
   ]);
 
-  if (!hoursData || hoursData.length === 0) {
+  if (!hoursData?.length) {
     return res.status(200).json({
       status: "success",
       message: "Report data not found",
@@ -1492,71 +2271,73 @@ exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
     });
   }
 
-  /* ---------- GROUP BY WORKER ---------- */
-  const groupedData = Object.values(
-    hoursData.reduce((acc, item) => {
-      const workerId = item.workerId._id.toString();
+  /* ---------- GROUP BY WORKER (Faster Map) ---------- */
 
-      if (!acc[workerId]) {
-        acc[workerId] = {
-          contractor: organization.company_name,
-          client: {
-            name: client.client_details.client.client_details.client_name,
-            project_name: client.project_details.project_name,
-            signature: client.client_details.client.clientSignature,
-          },
-          worker_details: {
-            ...item.workerId.worker_personal_details,
-            signature: item.workerId.signature,
-            position: item.workerId.worker_position[0]?.position || "",
-          },
-          hours_data: [],
-        };
-      }
+  const workerMap = new Map();
 
-      acc[workerId].hours_data.push({
-        project: item.project,
-        weekNumber: item.weekNumber,
-        task: client.project_details_for_workers.description,
-        status: item.status,
-        start_working_hours: item.start_working_hours,
-        finish_hours: item.finish_hours,
-        total_hours: item.total_hours,
+  for (const item of hoursData) {
+    const workerId = item.workerId.toString();
+
+    if (!workerMap.has(workerId)) {
+      workerMap.set(workerId, {
+        contractor: organization.company_name,
+        client: {
+          name: projectData.client_details.client.client_details.client_name,
+          project_name: projectData.project_details.project_name,
+          signature: projectData.client_details.client.clientSignature,
+        },
+        worker_details: {
+          ...item.worker_personal_details,
+          signature: item.worker_signature,
+          position: item.worker_position || "",
+        },
+        hours_data: [],
       });
+    }
 
-      return acc;
-    }, {}),
-  );
+    workerMap.get(workerId).hours_data.push({
+      project: item.project,
+      weekNumber: item.weekNumber,
+      task: projectData.project_details_for_workers.description,
+      status: item.status,
+      start_working_hours: item.start_working_hours,
+      finish_hours: item.finish_hours,
+      total_hours: item.total_hours,
+    });
+  }
 
-  /* ---------- SIGNATURE RULE ---------- */
-  const showSignature = status === "approved";
+  const groupedData = [...workerMap.values()];
 
-  /* ---------- HTML TEMPLATE ---------- */
-  const template = fs.readFileSync(
+  /* ---------- HTML BUILD (Optimized) ---------- */
+
+  const template = await fs.promises.readFile(
     path.join(process.cwd(), "src/templates/weeklyTimeSheet.html"),
     "utf8",
   );
 
-  let pagesHtml = "";
+  const showSignature = status === "approved";
 
-  for (const worker of groupedData) {
-    let rows = "";
-    let total = 0;
+  const pagesHtml = groupedData
+    .map((worker) => {
+      let total = 0;
 
-    worker.hours_data.forEach((h) => {
-      total += h.total_hours;
-      rows += `
-        <tr>
-          <td>${new Date(h.project.project_date).toLocaleDateString()}</td>
-          <td>${h.task}</td>
-          <td>${worker.worker_details.position}</td>
-          <td>${h.start_working_hours.hours}:${h.start_working_hours.minutes}</td>
-          <td>${h.finish_hours.hours}:${h.finish_hours.minutes}</td>
-          <td>${h.total_hours}</td>
-        </tr>`;
-    });
+      const rows = worker.hours_data
+        .map((h) => {
+          total += h.total_hours;
 
-    pagesHtml += `
+          return `
+          <tr>
+            <td>${new Date(h.project.project_date).toLocaleDateString()}</td>
+            <td>${h.task}</td>
+            <td>${worker.worker_details.position}</td>
+            <td>${h.start_working_hours.hours}:${h.start_working_hours.minutes}</td>
+            <td>${h.finish_hours.hours}:${h.finish_hours.minutes}</td>
+            <td>${h.total_hours}</td>
+          </tr>`;
+        })
+        .join("");
+
+      return `
       <div class="page">
         <h1>Weekly time sheet</h1>
 
@@ -1596,55 +2377,167 @@ exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
 
         <div class="sign-row">
           <div>
-            Employee:
             <div class="line">
               ${
                 showSignature && worker.worker_details.signature
                   ? `<img src="${worker.worker_details.signature}" class="signature-img" />`
                   : ""
               }
+              Employee:
             </div>
           </div>
 
           <div>
-            Supervisor:
             <div class="line">
               ${
                 showSignature && worker.client.signature
                   ? `<img src="${worker.client.signature}" class="signature-img" />`
                   : ""
               }
+              Supervisor:
             </div>
           </div>
         </div>
-      </div>
-    `;
-  }
+      </div>`;
+    })
+    .join("");
 
   const finalHtml = template.replace("{{PAGES}}", pagesHtml);
+  const pdfBuffer = await generateTimesheetPDFBuffer(finalHtml);
 
-  /* ---------- GENERATE & SAVE PDF ---------- */
-  const pdfUrl = await generateTimesheetPDF(finalHtml);
-  const filePath = path.join(
-    process.cwd(),
-    pdfUrl.replace("/", ""), // uploads/weekly_timesheet_xxx.pdf
-  );
-
-  setTimeout(
-    () => {
-      fs.unlink(filePath, (err) => {
-        if (err) {
-          console.error("PDF delete error:", err.message);
-        } else {
-          console.log("PDF delete success");
-        }
-      });
-    },
-    2 * 60 * 1000,
-  );
-  return res.status(200).json({
-    status: "success",
-    message: "Weekly timesheet generated successfully",
-    pdfUrl,
+  res.set({
+    "Content-Type": "application/pdf",
+    "Content-Disposition": "inline; filename=weekly_timesheet.pdf",
   });
+
+  return res.status(200).send(pdfBuffer);
 });
+
+// <----------- worker project hours for excel sheet start ----------->
+// helping function
+
+const generateDateRange = (start, end) => {
+  const dates = [];
+  const current = new Date(start);
+
+  while (current <= end) {
+    dates.push(current.toISOString().split("T")[0]);
+    current.setDate(current.getDate() + 1);
+  }
+
+  return dates;
+};
+
+exports.workerAllProjectHoursDataForExcel = catchAsync(
+  async (req, res, next) => {
+    const { tenantId } = req;
+    const { p_id } = req.body;
+
+    if (!tenantId) return next(new AppError("Tenant-id missing", 400));
+    if (!Array.isArray(p_id) || p_id.length === 0)
+      return next(new AppError("Project Required", 400));
+
+    const objectProjectIds = p_id.map((id) => new mongoose.Types.ObjectId(id));
+
+    /* ---------------- GET DATA ---------------- */
+
+    const hoursData = await hoursModel.aggregate([
+      {
+        $match: {
+          tenantId,
+          "project.projectId": { $in: objectProjectIds },
+        },
+      },
+      {
+        $lookup: {
+          from: "workers",
+          localField: "workerId",
+          foreignField: "_id",
+          as: "worker",
+        },
+      },
+      { $unwind: "$worker" },
+
+      {
+        $project: {
+          workerName: {
+            $trim: {
+              input: {
+                $concat: [
+                  "$worker.worker_personal_details.firstName",
+                  " ",
+                  "$worker.worker_personal_details.lastName",
+                ],
+              },
+            },
+          },
+
+          projectDate: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$project.project_date",
+            },
+          },
+
+          total_hours: 1,
+        },
+      },
+    ]);
+
+    if (!hoursData.length) {
+      return sendSuccess(
+        res,
+        "success",
+        {
+          minDate: null,
+          maxDate: null,
+          workers: [],
+        },
+        200,
+        true,
+      );
+    }
+
+    /* ---------------- MIN / MAX DATE ---------------- */
+
+    const allDates = hoursData.map((d) => new Date(d.projectDate));
+
+    const minDateObj = new Date(Math.min(...allDates));
+    const maxDateObj = new Date(Math.max(...allDates));
+
+    const minDate = minDateObj.toISOString().split("T")[0];
+    const maxDate = maxDateObj.toISOString().split("T")[0];
+
+    const dateRange = generateDateRange(minDateObj, maxDateObj);
+
+    /* ---------------- PIVOT ---------------- */
+
+    const workerMap = new Map();
+
+    for (const row of hoursData) {
+      if (!workerMap.has(row.workerName)) {
+        const dateObj = {};
+        dateRange.forEach((d) => (dateObj[d] = null));
+
+        workerMap.set(row.workerName, {
+          name: row.workerName,
+          hoursByDate: dateObj,
+        });
+      }
+
+      workerMap.get(row.workerName).hoursByDate[row.projectDate] =
+        row.total_hours;
+    }
+
+    const workers = Array.from(workerMap.values());
+    const finalData = {
+      startDate: minDate,
+      endDate: maxDate,
+      workers,
+    };
+
+    return sendSuccess(res, "success", finalData, 200, true);
+  },
+);
+
+// <----------- worker project hours for excel sheet end ----------->

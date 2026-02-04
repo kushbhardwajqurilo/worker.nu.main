@@ -1,35 +1,31 @@
 const puppeteer = require("puppeteer");
-const fs = require("fs");
-const path = require("path");
 
-const generateTimesheetPDF = async (html) => {
-  const uploadDir = path.join(process.cwd(), "public/upload");
-
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-  }
-
-  const fileName = `weekly_timesheet_${Date.now()}.pdf`;
-  const filePath = path.join(uploadDir, fileName);
-
+const generateTimesheetPDFBuffer = async (html) => {
   const browser = await puppeteer.launch({
     headless: "new",
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
-  const page = await browser.newPage();
-  await page.setContent(html, { waitUntil: "networkidle0" });
+  try {
+    const page = await browser.newPage();
 
-  await page.pdf({
-    path: filePath, // 🔥 SAVE TO DISK
-    format: "A4",
-    printBackground: true,
-  });
+    await page.setContent(html, { waitUntil: "networkidle0" });
 
-  await browser.close();
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: {
+        top: "20mm",
+        bottom: "20mm",
+        left: "15mm",
+        right: "15mm",
+      },
+    });
 
-  // 🔥 return PUBLIC DOWNLOAD URL
-  return `/upload/${fileName}`;
+    return pdfBuffer; // ✅ BUFFER ONLY
+  } finally {
+    await browser.close();
+  }
 };
 
-module.exports = generateTimesheetPDF;
+module.exports = generateTimesheetPDFBuffer;

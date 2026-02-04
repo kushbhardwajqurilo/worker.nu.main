@@ -15,6 +15,8 @@ const {
   approveHoursByWeekRange,
   checkSubmitHoursOnDateForClientWorker,
   weeklyTimeSheetGenerate,
+  addminDashboardStats,
+  workerAllProjectHoursDataForExcel,
 } = require("../controller/hours/hours.controller");
 const {
   authMiddeware,
@@ -83,7 +85,12 @@ hoursRouter.get(
   accessMiddleware("client"),
   dashboardHours,
 );
-
+hoursRouter.get(
+  "/admin-dashboard-hours",
+  authMiddeware,
+  accessMiddleware("admin"),
+  addminDashboardStats,
+);
 hoursRouter.get(
   "/single-worker-hour",
   clientOrAdminAuthMiddleware,
@@ -126,6 +133,13 @@ hoursRouter.post(
   clientOrAdminAuthMiddleware,
   accessMiddleware("client", "admin"),
   weeklyTimeSheetGenerate,
+);
+
+hoursRouter.post(
+  "/excel-data",
+  clientOrAdminAuthMiddleware,
+  accessMiddleware("client", "admin"),
+  workerAllProjectHoursDataForExcel,
 );
 // <------ weeekly reports start end ----------->
 module.exports = hoursRouter;

@@ -57,7 +57,7 @@ exports.addClient = catchAsync(async (req, res, next) => {
     process.env.CLIENT_KEY,
   );
 
-  client.client_url = `http://localhost:3000/client?tkn=${urlToken}`;
+  client.client_url = `${process.env.clientDashboardUrl}${urlToken}`;
   client.urlVisibleToAdmin = true;
   client.urlAdminExpireAt = Date.now() + 24 * 60 * 60 * 1000;
   await client.save();

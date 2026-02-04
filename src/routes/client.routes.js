@@ -91,7 +91,7 @@ clientRouter.get(
   accessMiddleware("client"),
   isClientSign,
 );
-clientRouter.get(
+clientRouter.post(
   "/client-worker-hours",
   clientAuthMiddleware,
   accessMiddleware("client"),

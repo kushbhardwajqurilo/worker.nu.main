@@ -29,6 +29,7 @@ const {
   accessMiddleware,
   workerAuthMiddleware,
   workerOrAdminAuthMiddleware,
+  clientOrAdminAuthMiddleware,
 } = require("../middleware/authMiddleware");
 const ImageUpload = require("../middleware/signature.middleware");
 const uploadSignature = require("../middleware/signature.middleware");
@@ -93,8 +94,8 @@ workerRouter.post(
 );
 workerRouter.get(
   "/get-projects",
-  authMiddeware,
-  accessMiddleware("admin"),
+  clientOrAdminAuthMiddleware,
+  accessMiddleware("admin", "client"),
   getAllProjectsToWorkerAddController,
 );
 workerRouter.get(

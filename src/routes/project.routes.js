@@ -11,10 +11,13 @@ const {
   addWorkerInProject,
   getProjectEconomy,
   projectWorkerList,
+  getProjectFolderFile,
 } = require("../controller/project/project.controller");
 const {
   authMiddeware,
   accessMiddleware,
+  workerAuthMiddleware,
+  clientOrAdminAuthMiddleware,
 } = require("../middleware/authMiddleware");
 const { uploadDocuments } = require("../middleware/upload.middleware");
 
@@ -44,8 +47,8 @@ projectRouter.get(
 
 projectRouter.get(
   "/worker-list",
-  authMiddeware,
-  accessMiddleware("admin"),
+  clientOrAdminAuthMiddleware,
+  accessMiddleware("admin", "client"),
   workerList,
 );
 projectRouter.get(
@@ -96,5 +99,11 @@ projectRouter.get(
   authMiddeware,
   accessMiddleware("admin"),
   projectWorkerList,
+);
+projectRouter.get(
+  "/project-folder",
+  workerAuthMiddleware,
+  accessMiddleware("worker"),
+  getProjectFolderFile,
 );
 module.exports = projectRouter;

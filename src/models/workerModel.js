@@ -37,7 +37,6 @@ const workerSchema = new mongoose.Schema(
         projectId: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "project",
-          required: [true, "project required"],
         },
       },
     ],

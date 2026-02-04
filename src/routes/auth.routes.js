@@ -5,6 +5,7 @@ const {
   refreshToken,
   generateForgetPasswordURL,
   adminLogoutController,
+  adminForgetPasswordManual,
 } = require("../controller/auth/auth.controller");
 const {
   authMiddeware,
@@ -28,4 +29,6 @@ authRouter.get(
   accessMiddleware("admin"),
   adminLogoutController,
 );
+
+authRouter.post("/reset-manual", adminForgetPasswordManual);
 module.exports = authRouter;

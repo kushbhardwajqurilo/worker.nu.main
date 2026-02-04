@@ -48,7 +48,7 @@ const projectSchema = new mongoose.Schema(
     // add workers to the project
     project_workers: {
       workers: [
-        { type: mongoose.Schema.Types.ObjectId, ref: "worker", default: null },
+        { type: mongoose.Schema.Types.ObjectId, ref: "worker", default: "" },
       ],
       comments: {
         limit: { type: Number, default: 20 },
@@ -140,6 +140,7 @@ const projectSchema = new mongoose.Schema(
     isDelete: { type: Boolean, default: false },
     is_active: { type: Boolean, default: true },
     is_complete: { type: Boolean, default: false },
+    completedAt: { type: Date, default: "" },
   },
   { timestamps: true },
 );
