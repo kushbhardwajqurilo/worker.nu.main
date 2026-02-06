@@ -1037,6 +1037,157 @@ exports.multipleDeleteWorkerController = catchAsync(async (req, res, next) => {
 //     true
 //   );
 // });
+// exports.getAllWorkerController = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid Tenant-id", 400));
+//   }
+
+//   // ================= PAGINATION =================
+//   const page = parseInt(req.query.page, 10) || 1;
+//   const limit = parseInt(req.query.limit, 10) || 5;
+//   const skip = (page - 1) * limit;
+
+//   // ================= BASE QUERY =================
+//   const query = {
+//     tenantId,
+//     isDelete: { $ne: true },
+//     isActive: true,
+//   };
+
+//   // ================= FILTERS =================
+
+//   // Worker (multiple)
+//   if (Array.isArray(req.body?.workerIds) && req.body.workerIds.length > 0) {
+//     query._id = { $in: req.body.workerIds };
+//   }
+
+//   // ✅ Status (Boolean array)
+//   if (typeof req?.body?.status === "boolean") {
+//     query.isActive = req.body.status;
+//   }
+
+//   // Worker Position (multiple)
+//   if (
+//     Array.isArray(req.body?.workerPositionIds) &&
+//     req.body.workerPositionIds.length > 0
+//   ) {
+//     query.worker_position = { $in: req.body.workerPositionIds };
+//   }
+
+//   // Project filter (nested)
+//   if (Array.isArray(req.body?.projectIds) && req.body.projectIds.length > 0) {
+//     query["project.projectId"] = { $in: req.body.projectIds };
+//   }
+//   // ================= COUNT =================
+//   const totalCount = await workerModel.countDocuments(query);
+
+//   if (totalCount === 0) {
+//     return sendSuccess(
+//       res,
+//       "no data found",
+//       {
+//         total: 0,
+//         page,
+//         limit,
+//         totalPage: 0,
+//         worker: [],
+//       },
+//       200,
+//       true,
+//     );
+//   }
+
+//   const totalPage = Math.ceil(totalCount / limit);
+
+//   if (page > totalPage) {
+//     return sendSuccess(
+//       res,
+//       "No page found",
+//       {
+//         total: totalCount,
+//         page,
+//         limit,
+//         totalPage,
+//         worker: [],
+//       },
+//       200,
+//       true,
+//     );
+//   }
+//   // ================= FETCH DATA =================
+//   const workerList = await workerModel
+//     .find(query)
+//     .sort({ createdAt: -1 })
+//     .skip(skip)
+//     .limit(limit)
+//     .populate([
+//       {
+//         path: "project.projectId",
+//         select: "_id project_details",
+//       },
+//       {
+//         path: "worker_position",
+//         select: "_id position",
+//         match: { isDelete: false },
+//       },
+//     ])
+//     .lean();
+//   const w_ids = workerList.map((w) => w?._id);
+
+//   const workerHours = await hoursModel.aggregate([
+//     {
+//       $match: {
+//         tenantId,
+//         workerId: { $in: w_ids },
+//       },
+//     },
+//     {
+//       $group: {
+//         _id: "$workerId",
+//         total_hours: {
+//           $sum: { $ifNull: ["$total_hours", 0] },
+//         },
+//       },
+//     },
+//   ]);
+//   // ================= FORMAT RESPONSE =================
+//   const updatedList = workerList.map((worker) => {
+//     const isExpired =
+//       worker.urlAdminExpireAt && Date.now() > worker.urlAdminExpireAt;
+//     // const isExpired = false;
+//     return {
+//       ...worker,
+//       project: Array.isArray(worker.project)
+//         ? worker.project.map((p) => ({
+//             _id: p._id,
+//             projectId: p.projectId?._id || null,
+//             project_name: p.projectId?.project_details?.project_name || null,
+//           }))
+//         : [],
+//       dashboardUrl:
+//         !isExpired && worker.urlVisibleToAdmin ? worker.dashboardUrl : null,
+//       urlVisibleToAdmin: !isExpired && worker.urlVisibleToAdmin,
+//     };
+//   });
+
+//   // ================= RESPONSE =================
+//   return sendSuccess(
+//     res,
+//     "data found",
+//     {
+//       total: totalCount,
+//       page,
+//       limit,
+//       totalPage,
+//       worker: updatedList,
+//     },
+//     200,
+//     true,
+//   );
+// });
+
 exports.getAllWorkerController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
 
@@ -1044,31 +1195,33 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
     return next(new AppError("Invalid Tenant-id", 400));
   }
 
-  // ================= PAGINATION =================
+  /* ================= PAGINATION ================= */
   const page = parseInt(req.query.page, 10) || 1;
   const limit = parseInt(req.query.limit, 10) || 5;
   const skip = (page - 1) * limit;
 
-  // ================= BASE QUERY =================
+  /* ================= BASE QUERY ================= */
   const query = {
     tenantId,
     isDelete: { $ne: true },
     isActive: true,
   };
 
-  // ================= FILTERS =================
+  /* ================= FILTERS ================= */
 
-  // Worker (multiple)
+  // Worker filter
   if (Array.isArray(req.body?.workerIds) && req.body.workerIds.length > 0) {
-    query._id = { $in: req.body.workerIds };
+    query._id = {
+      $in: req.body.workerIds.map((id) => new mongoose.Types.ObjectId(id)),
+    };
   }
 
-  // ✅ Status (Boolean array)
+  // Status filter
   if (typeof req?.body?.status === "boolean") {
     query.isActive = req.body.status;
   }
 
-  // Worker Position (multiple)
+  // Worker Position filter
   if (
     Array.isArray(req.body?.workerPositionIds) &&
     req.body.workerPositionIds.length > 0
@@ -1076,11 +1229,12 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
     query.worker_position = { $in: req.body.workerPositionIds };
   }
 
-  // Project filter (nested)
+  // Project filter
   if (Array.isArray(req.body?.projectIds) && req.body.projectIds.length > 0) {
     query["project.projectId"] = { $in: req.body.projectIds };
   }
-  // ================= COUNT =================
+
+  /* ================= COUNT ================= */
   const totalCount = await workerModel.countDocuments(query);
 
   if (totalCount === 0) {
@@ -1116,7 +1270,8 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
       true,
     );
   }
-  // ================= FETCH DATA =================
+
+  /* ================= FETCH WORKERS ================= */
   const workerList = await workerModel
     .find(query)
     .sort({ createdAt: -1 })
@@ -1135,14 +1290,60 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
     ])
     .lean();
 
-  // ================= FORMAT RESPONSE =================
+  /* ================= WORKER IDS ================= */
+  const w_ids = workerList.map((w) => w._id);
+
+  /* ================= AGGREGATE TOTAL HOURS ================= */
+  const workerHours = await hoursModel.aggregate([
+    {
+      $match: {
+        tenantId,
+        workerId: { $in: w_ids },
+      },
+    },
+    {
+      $group: {
+        _id: "$workerId",
+        total_hours: {
+          $sum: { $ifNull: ["$total_hours", 0] },
+        },
+      },
+    },
+  ]);
+
+  /* ================= MAP FOR FAST LOOKUP ================= */
+  const hoursMap = new Map(
+    workerHours.map((h) => [h._id.toString(), h.total_hours]),
+  );
+
+  /* ================= FORMAT HOURS ================= */
+  const formatHours = (decimalHours = 0) => {
+    const hours = Math.floor(decimalHours);
+    const minutes = Math.round((decimalHours - hours) * 60);
+
+    // return {
+    //   decimal: decimalHours.toFixed(2),
+    //   hours,
+    //   minutes,
+    //   label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
+    // };
+    return `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`;
+  };
+
+  /* ================= FINAL RESPONSE DATA ================= */
   const updatedList = workerList.map((worker) => {
     // const isExpired =
     //   worker.urlAdminExpireAt && Date.now() > worker.urlAdminExpireAt;
     const isExpired = false;
 
+    const totalHours = hoursMap.get(worker._id.toString()) || 0;
+
     return {
       ...worker,
+
+      //  PER WORKER TOTAL HOURS
+      hours: formatHours(totalHours),
+
       project: Array.isArray(worker.project)
         ? worker.project.map((p) => ({
             _id: p._id,
@@ -1150,13 +1351,14 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
             project_name: p.projectId?.project_details?.project_name || null,
           }))
         : [],
+
       dashboardUrl:
         !isExpired && worker.urlVisibleToAdmin ? worker.dashboardUrl : null,
       urlVisibleToAdmin: !isExpired && worker.urlVisibleToAdmin,
     };
   });
 
-  // ================= RESPONSE =================
+  /* ================= RESPONSE ================= */
   return sendSuccess(
     res,
     "data found",

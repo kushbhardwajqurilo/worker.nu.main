@@ -151,5 +151,5 @@ projectSchema.pre("save", async function () {
     this.projectId = await generateId();
   }
 });
-projectSchema.index({ tenantId: 1 });
+projectSchema.index({ tenantId: 1, "client_details.client": 1 });
 module.exports = mongoose.model("project", projectSchema);

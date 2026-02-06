@@ -7,7 +7,7 @@ const calculateLateHoursByDate = ({
     return {
       isLate: false,
       lateHours: 0,
-      lateTime: "00:00",
+      lateTime: "0h",
     };
   }
 
@@ -18,38 +18,57 @@ const calculateLateHoursByDate = ({
   const projectDateOnly = projectDay.toISOString().split("T")[0];
   const createdDateOnly = createdDate.toISOString().split("T")[0];
 
-  // ✅ Same date → NOT late
+  // same date → not late
   if (projectDateOnly === createdDateOnly) {
     return {
       isLate: false,
       lateHours: 0,
-      lateTime: "00:00",
+      lateTime: "0h",
     };
   }
 
-  // Project date end (23:59:59)
+  // project day end
   const projectEnd = new Date(projectDay);
   projectEnd.setHours(23, 59, 59, 999);
 
-  // created before project end → not late
   if (createdDate <= projectEnd) {
     return {
       isLate: false,
       lateHours: 0,
-      lateTime: "00:00",
+      lateTime: "0h",
     };
   }
 
+  /* ---------- DIFF ---------- */
   const diffMs = createdDate - projectEnd;
   const totalMinutes = Math.floor(diffMs / (1000 * 60));
 
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
+  // 🔥 IMPORTANT PART
+  // convert minutes → hours (ROUND UP)
+  const totalHoursRounded = Math.ceil(totalMinutes / 60);
+
+  const days = Math.floor(totalHoursRounded / 24);
+  const hours = totalHoursRounded % 24;
+
+  /* ---------- FORMAT ---------- */
+  let lateTimeLabel = "";
+
+  if (days > 0) {
+    lateTimeLabel += `${days}day`;
+  }
+
+  if (hours > 0) {
+    lateTimeLabel += `${days > 0 ? " " : ""}${hours}h`;
+  }
+
+  if (!lateTimeLabel) {
+    lateTimeLabel = "0h";
+  }
 
   return {
     isLate: true,
-    lateHours: hours, // ✅ TOTAL HOURS
-    lateTime: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
+    lateHours: totalHoursRounded, // numeric, hours only
+    lateTime: lateTimeLabel, // e.g. "1day 6h"
   };
 };
 

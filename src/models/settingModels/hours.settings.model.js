@@ -20,12 +20,6 @@ const hoursSettingSchema = new mongoose.Schema({
     type: Number,
     required: [true, "unquestion day limit required"],
   },
-  hours_editing: {
-    max_number_of_day: {
-      type: Number,
-      required: [true],
-    },
-  },
 });
 const HoursSettingsModel = mongoose.model("hours_settings", hoursSettingSchema);
 module.exports = HoursSettingsModel;

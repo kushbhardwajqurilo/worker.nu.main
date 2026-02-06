@@ -176,6 +176,9 @@ workerSchema.pre("save", async function () {
 
   this.id = `E-${counter.seq}`;
 });
-workerSchema.index({ tenantId: 1 });
+workerSchema.index({ tenantId: 1, isDelete: 1, isActive: 1 });
+workerSchema.index({ createdAt: -1 });
+workerSchema.index({ worker_position: 1 });
+workerSchema.index({ "project.projectId": 1 });
 const workerModel = mongoose.model("worker", workerSchema);
 module.exports = { workerModel, workerPositionModel };

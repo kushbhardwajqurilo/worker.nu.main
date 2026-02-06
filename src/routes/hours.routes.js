@@ -36,7 +36,7 @@ hoursRouter.post(
   "/submit-hours",
   workerOrAdminAuthMiddleware,
   accessMiddleware("admin", "worker"),
-  hoursImageUpload.single("file"),
+  hoursImageUpload.any(),
   createWorkerHours,
 );
 
@@ -121,8 +121,8 @@ hoursRouter.put(
 // <----- check submited hours by date --------->
 hoursRouter.post(
   "/check-hours",
-  workerAuthMiddleware,
-  accessMiddleware("worker"),
+  workerOrAdminAuthMiddleware,
+  accessMiddleware("worker", "admin"),
   checkSubmitHoursOnDateForClientWorker,
 );
 // <-----end ------->

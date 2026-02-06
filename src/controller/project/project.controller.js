@@ -444,6 +444,171 @@ exports.addProjectController = catchAsync(async (req, res, next) => {
 //   );
 // });
 
+// exports.getAllProjectsController = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+
+//   if (!tenantId) {
+//     return next(new AppError("Tenant Missing The Request", 400));
+//   }
+
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid Tenant", 400));
+//   }
+
+//   // ================= PAGINATION =================
+//   const page = parseInt(req.query.page, 10) || 1;
+//   const limit = parseInt(req.query.limit, 10) || 5;
+//   const skip = (page - 1) * limit;
+
+//   // ================= QUERY =================
+//   const query = {
+//     tenantId,
+//     isDelete: false,
+//   };
+
+//   if (Array.isArray(req.body?.clientIds) && req.body.clientIds.length > 0) {
+//     query["client_details.client"] = {
+//       $in: req.body.clientIds.map((id) => new mongoose.Types.ObjectId(id)),
+//     };
+//   }
+
+//   if (Array.isArray(req.body?.projectIds) && req.body.projectIds.length > 0) {
+//     query._id = {
+//       $in: req.body.projectIds.map((id) => new mongoose.Types.ObjectId(id)),
+//     };
+//   }
+
+//   if (req.body?.status === "Completed") {
+//     query.is_complete = true;
+//   }
+//   if (req.body?.status === "Active") {
+//     query.is_complete = false;
+//   }
+//   const totalCount = await projectMode.countDocuments(query);
+
+//   if (totalCount === 0) {
+//     return sendSuccess(res, "no data found", [], 200, true);
+//   }
+
+//   const totalPage = Math.ceil(totalCount / limit);
+
+//   if (page > totalPage) {
+//     return sendSuccess(
+//       res,
+//       "No page found",
+//       { total: totalCount, page, limit, totalPage, projects: [] },
+//       200,
+//       true,
+//     );
+//   }
+
+//   // ================= FETCH PROJECTS =================
+//   const projects = await projectMode
+//     .find(query)
+//     .sort({ createdAt: -1 })
+//     .skip(skip)
+//     .limit(limit)
+//     .populate([
+//       {
+//         path: "project_workers.workers",
+//         select:
+//           "personal_information.documents.profile_picture worker_personal_details",
+//       },
+//       {
+//         path: "client_details.client",
+//         select: "_id client_details.client_name",
+//       },
+//       {
+//         path: "project_time_economical_details.hourly_rate.hourly_by_position.position",
+//         select: "position",
+//       },
+//     ])
+//     .lean();
+
+//   // ================= PROJECT IDS =================
+//   const projectedIds = projects.map((p) => p._id);
+
+//   // ================= TOTAL HOURS AGGREGATION =================
+//   const projectHours = await hoursModel.aggregate([
+//     {
+//       $match: {
+//         tenantId,
+//         "project.projectId": { $in: projectedIds },
+//       },
+//     },
+//     {
+//       $group: {
+//         _id: "$project.projectId",
+//         totalHours: { $sum: "$total_hours" },
+//       },
+//     },
+//     {
+//       $project: {
+//         totalHours: { $round: ["$totalHours", 2] },
+//       },
+//     },
+//   ]);
+
+//   // ================= MAP (projectId => totalHours) =================
+//   const hoursMap = {};
+//   projectHours.forEach((item) => {
+//     hoursMap[item._id.toString()] = item.totalHours;
+//   });
+
+//   // ================= FORMAT RESPONSE =================
+//   const formattedProjects = projects.map((project, index) => {
+//     // workers formatting
+//     if (
+//       project.project_workers &&
+//       Array.isArray(project.project_workers.workers)
+//     ) {
+//       project.project_workers.workers = project.project_workers.workers.map(
+//         (worker) => ({
+//           _id: worker._id,
+//           worker_name: `${worker.worker_personal_details.firstName} ${worker.worker_personal_details.lastName}`,
+//           profile_picture:
+//             worker.personal_information?.documents?.profile_picture ?? null,
+//         }),
+//       );
+//     }
+
+//     // client formatting
+//     let formattedClientDetails = null;
+//     if (project.client_details) {
+//       formattedClientDetails = {
+//         _id: project.client_details.client?._id ?? null,
+//         client_name:
+//           project.client_details.client?.client_details?.client_name ?? null,
+//         company_no: project.client_details.company_no ?? null,
+//         email: project.client_details.email ?? null,
+//         phone: project.client_details.phone ?? null,
+//       };
+//     }
+
+//     return {
+//       sr_no: (page - 1) * limit + index + 1,
+//       ...project,
+//       total_hours: hoursMap[project._id.toString()] ?? 0, // ✅ ONLY NUMBER
+//       client_details: formattedClientDetails,
+//     };
+//   });
+
+//   // ================= RESPONSE =================
+//   return sendSuccess(
+//     res,
+//     "Projects fetched successfully",
+//     {
+//       total: totalCount,
+//       page,
+//       limit,
+//       totalPage,
+//       projects: formattedProjects,
+//     },
+//     200,
+//     true,
+//   );
+// });
+
 exports.getAllProjectsController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
 
@@ -484,6 +649,7 @@ exports.getAllProjectsController = catchAsync(async (req, res, next) => {
   if (req.body?.status === "Active") {
     query.is_complete = false;
   }
+
   const totalCount = await projectMode.countDocuments(query);
 
   if (totalCount === 0) {
@@ -528,7 +694,7 @@ exports.getAllProjectsController = catchAsync(async (req, res, next) => {
   // ================= PROJECT IDS =================
   const projectedIds = projects.map((p) => p._id);
 
-  // ================= TOTAL HOURS AGGREGATION =================
+  // ================= HOURS AGGREGATION (UPDATED) =================
   const projectHours = await hoursModel.aggregate([
     {
       $match: {
@@ -540,19 +706,25 @@ exports.getAllProjectsController = catchAsync(async (req, res, next) => {
       $group: {
         _id: "$project.projectId",
         totalHours: { $sum: "$total_hours" },
+        project_last_activity: { $max: "$createdAt" }, //  final name
       },
     },
     {
       $project: {
         totalHours: { $round: ["$totalHours", 2] },
+        project_last_activity: 1,
       },
     },
   ]);
 
-  // ================= MAP (projectId => totalHours) =================
+  // ================= MAPS =================
   const hoursMap = {};
+  const projectLastActivityMap = {};
+
   projectHours.forEach((item) => {
-    hoursMap[item._id.toString()] = item.totalHours;
+    const projectId = item._id.toString();
+    hoursMap[projectId] = item.totalHours;
+    projectLastActivityMap[projectId] = item.project_last_activity ?? null;
   });
 
   // ================= FORMAT RESPONSE =================
@@ -588,7 +760,9 @@ exports.getAllProjectsController = catchAsync(async (req, res, next) => {
     return {
       sr_no: (page - 1) * limit + index + 1,
       ...project,
-      total_hours: hoursMap[project._id.toString()] ?? 0, // ✅ ONLY NUMBER
+      total_hours: hoursMap[project._id.toString()] ?? 0,
+      project_last_activity:
+        projectLastActivityMap[project._id.toString()] ?? null, //  FINAL
       client_details: formattedClientDetails,
     };
   });
@@ -636,7 +810,6 @@ exports.getSingleProjectController = catchAsync(async (req, res, next) => {
 // <----- update project start --------->
 exports.updateProjectController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
-
   if (!tenantId) {
     return next(new AppError("Tenant Missing The Request", 400));
   }
@@ -648,11 +821,6 @@ exports.updateProjectController = catchAsync(async (req, res, next) => {
   if (!project_id || project_id.toString().trim().length === 0) {
     return next(new AppError("Project id missing", 400));
   }
-
-  if (!req.body && !req.files?.length) {
-    return next(new AppError("No update data provided", 400));
-  }
-
   // ================= SAFE JSON PARSER =================
   const parseJSON = (value, field) => {
     try {
@@ -872,7 +1040,7 @@ exports.addWorkerInProject = catchAsync(async (req, res, next) => {
     return next(new AppError("project not found try again later", 400));
   }
 
-  // ✅ DIRECT REPLACE workers array
+  //  DIRECT REPLACE workers array
   await projectMode.updateOne(
     {
       tenantId,
@@ -968,7 +1136,7 @@ exports.clientList = catchAsync(async (req, res, next) => {
   }
   const clients = await clientModel
     .find({ isDelete: { $ne: true } })
-    .select("_id client_details")
+    .select("_id client_details contact_details")
     .lean();
 
   if (!clients) {
@@ -978,6 +1146,9 @@ exports.clientList = catchAsync(async (req, res, next) => {
     return {
       _id: val._id,
       client_name: val.client_details.client_name,
+      email: val.client_details.client_email,
+      company_registration: val.client_details?.companyName,
+      phone: val?.contact_details[0].phone,
     };
   });
 
@@ -1004,14 +1175,13 @@ exports.getProjectPictures = catchAsync(async (req, res, next) => {
         select: "worker_personal_details",
       },
     ])
-    .select("project workerId total_hours comments image createdAt")
+    .select("project workerId total_hours comments images createdAt")
     .lean();
   if (!worker_hours) {
     return sendSuccess(res, "project pictures not found", {}, 200, true);
   }
-
   const filterDataa = worker_hours.map(
-    ({ workerId, createdAt, project, ...rest }) => ({
+    ({ workerId, createdAt, project, images, ...rest }) => ({
       ...rest,
       date: project.project_date,
       worker: workerId
@@ -1021,6 +1191,9 @@ exports.getProjectPictures = catchAsync(async (req, res, next) => {
           }
         : null,
       date_of_submission: createdAt,
+      images: Array.isArray(images)
+        ? images.map((url) => ({ url: url?.url }))
+        : [],
     }),
   );
   return sendSuccess(res, "project picture found", filterDataa, 200, true);
@@ -1164,3 +1337,31 @@ exports.getProjectFolderFile = catchAsync(async (req, res, next) => {
   const folder_files = folder ? folder : [];
   return sendSuccess(res, "success", folder_files, 200, true);
 });
+
+// <--------- project minimum amount words get ---------->
+
+exports.getProjectMinmumWords = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  if (!tenantId || !isValidCustomUUID(tenantId)) {
+    return next(new AppError("Tenant Missing Or Invalid", 400));
+  }
+  const { p_id } = req.params;
+  if (!p_id || !mongoose.Types.ObjectId.isValid(p_id)) {
+    return next(new AppError("project id missing or invalid", 400));
+  }
+  const words = await projectMode
+    .findOne({ _id: p_id, tenantId })
+    .select("project_workers.comments.limit project_workers.photos.limit");
+
+  return sendSuccess(
+    res,
+    "success",
+    {
+      limit: words.project_workers.comments.limit,
+      photo_limit: words.project_workers.photos.limit,
+    },
+    200,
+    true,
+  );
+});
+// <--------- project minimum amount words get end ---------->

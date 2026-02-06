@@ -9,7 +9,7 @@ const calculateLateByProjectEnd = ({
   if (dayOff) {
     return {
       isLate: false,
-      lateTime: "00:00",
+      lateTime: "0h",
       lateMinutes: 0,
     };
   }
@@ -17,7 +17,7 @@ const calculateLateByProjectEnd = ({
   if (!projectDate || !finishHours || !submittedAt) {
     return {
       isLate: false,
-      lateTime: "00:00",
+      lateTime: "0h",
       lateMinutes: 0,
     };
   }
@@ -25,7 +25,7 @@ const calculateLateByProjectEnd = ({
   const endHour = Number(finishHours.hours) || 0;
   const endMinute = Number(finishHours.minutes) || 0;
 
-  // Build project end datetime
+  /* ---------- PROJECT END ---------- */
   const projectEnd = new Date(projectDate);
   projectEnd.setHours(endHour, endMinute + graceMinutes, 0, 0);
 
@@ -34,21 +34,40 @@ const calculateLateByProjectEnd = ({
   if (submittedDate <= projectEnd) {
     return {
       isLate: false,
-      lateTime: "00:00",
+      lateTime: "0h",
       lateMinutes: 0,
     };
   }
 
+  /* ---------- DIFF ---------- */
   const diffMs = submittedDate - projectEnd;
   const totalMinutes = Math.floor(diffMs / (1000 * 60));
 
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
+  // 🔥 minutes → hours (ROUND UP)
+  const totalHoursRounded = Math.ceil(totalMinutes / 60);
+
+  const days = Math.floor(totalHoursRounded / 24);
+  const hours = totalHoursRounded % 24;
+
+  /* ---------- FORMAT ---------- */
+  let lateTimeLabel = "";
+
+  if (days > 0) {
+    lateTimeLabel += `${days}day`;
+  }
+
+  if (hours > 0) {
+    lateTimeLabel += `${days > 0 ? " " : ""}${hours}h`;
+  }
+
+  if (!lateTimeLabel) {
+    lateTimeLabel = "0h";
+  }
 
   return {
     isLate: true,
-    lateMinutes: totalMinutes,
-    lateTime: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
+    lateMinutes: totalMinutes, // raw minutes (DB / penalty logic)
+    lateTime: lateTimeLabel, // UI: "1day 6h"
   };
 };
 

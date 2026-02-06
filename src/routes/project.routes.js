@@ -12,6 +12,7 @@ const {
   getProjectEconomy,
   projectWorkerList,
   getProjectFolderFile,
+  getProjectMinmumWords,
 } = require("../controller/project/project.controller");
 const {
   authMiddeware,
@@ -67,6 +68,7 @@ projectRouter.patch(
   "/update-project",
   authMiddeware,
   accessMiddleware("admin"),
+  uploadDocuments,
   updateProjectController,
 ); // update project route
 projectRouter.delete(
@@ -105,5 +107,12 @@ projectRouter.get(
   workerAuthMiddleware,
   accessMiddleware("worker"),
   getProjectFolderFile,
+);
+
+projectRouter.get(
+  "/project-words/:p_id",
+  workerAuthMiddleware,
+  accessMiddleware("worker"),
+  getProjectMinmumWords,
 );
 module.exports = projectRouter;

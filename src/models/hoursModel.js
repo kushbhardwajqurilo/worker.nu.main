@@ -48,16 +48,23 @@ const workerHoursSchema = new mongoose.Schema(
     },
 
     break_time: {
-      type: String,
+      type: Number,
+      default: 0,
     },
 
     total_hours: {
       type: Number,
       default: 0,
     },
-
+    lateReason: { type: String, default: "" },
     comments: { type: String, required: true },
-    image: { type: String },
+    images: [
+      {
+        url: String,
+        public_id: String,
+        field: String,
+      },
+    ],
     createdBy: {
       type: String,
       default: "worker",
@@ -129,5 +136,5 @@ workerHoursSchema.pre("findOneAndUpdate", async function () {
 
   this.setUpdate(update);
 });
-workerHoursSchema.index({ tenantId: 1 });
+workerHoursSchema.index({ tenantId: 1, workerId: 1, created: -1 });
 module.exports = mongoose.model("worker_hours", workerHoursSchema);
