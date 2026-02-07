@@ -1,13 +1,12 @@
 const {
-  addCompanyController,
-  updateCompanyController,
-  getCompanyDetailController,
   addCompanyAlias,
   getSingleCompanyAliasController,
   getAllCompanyAliasController,
   updateCompanyAliasController,
   deleteCompanyAliasController,
   deleteMultipleCompanyAliasController,
+  addCompanyController,
+  getCompanyDetailController,
 } = require("../controller/company/company.controller");
 const {
   authMiddeware,
@@ -22,20 +21,13 @@ companyRouter.post(
   authMiddeware,
   accessMiddleware("admin"),
   uploadDocuments,
-  addCompanyController
-);
-companyRouter.put(
-  "/update-company",
-  authMiddeware,
-  accessMiddleware("admin"),
-  uploadDocuments,
-  updateCompanyController
+  addCompanyController,
 );
 companyRouter.get(
   "/get-company",
   authMiddeware,
   accessMiddleware("admin"),
-  getCompanyDetailController
+  getCompanyDetailController,
 );
 
 // compay alias routes
@@ -44,21 +36,37 @@ companyRouter.post(
   authMiddeware,
   accessMiddleware("admin"),
   uploadDocuments,
-  addCompanyAlias
+  addCompanyAlias,
 );
 companyRouter.get(
   "/get-single-alias",
   authMiddeware,
   accessMiddleware("admin"),
-  getSingleCompanyAliasController
+  getSingleCompanyAliasController,
 );
 companyRouter.get(
   "/get-all-alias",
   authMiddeware,
   accessMiddleware("admin"),
-  getAllCompanyAliasController
+  getAllCompanyAliasController,
 );
-companyRouter.put("/update-alias", updateCompanyAliasController);
-companyRouter.delete("/delete-single_alias", deleteCompanyAliasController);
-companyRouter.delete("/multiple-alias", deleteMultipleCompanyAliasController);
+companyRouter.put(
+  "/update-alias",
+  authMiddeware,
+  accessMiddleware("admin"),
+  uploadDocuments,
+  updateCompanyAliasController,
+);
+companyRouter.delete(
+  "/delete-single_alias",
+  authMiddeware,
+  accessMiddleware("admin"),
+  deleteCompanyAliasController,
+);
+companyRouter.delete(
+  "/multiple-alias",
+  authMiddeware,
+  accessMiddleware("admin"),
+  deleteMultipleCompanyAliasController,
+);
 module.exports = companyRouter;

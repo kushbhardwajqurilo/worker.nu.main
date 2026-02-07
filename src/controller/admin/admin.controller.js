@@ -47,6 +47,15 @@ exports.getHolidayRequest = catchAsync(async (req, res, next) => {
     workerObjectIds = w_id.map((id) => new mongoose.Types.ObjectId(id));
     query.workerId = { $in: workerObjectIds };
   }
+  if (req.body?.date) {
+    const filterDate = new Date(req.body.date);
+
+    // optional but recommended
+    filterDate.setHours(0, 0, 0, 0);
+
+    query["duration.startDate"] = { $lte: filterDate };
+    query["duration.endDate"] = { $gte: filterDate };
+  }
   // ================= TOTAL COUNT =================
   const totalRecords = await holidayModel.countDocuments(query);
 
@@ -130,7 +139,7 @@ exports.getHolidayRequest = catchAsync(async (req, res, next) => {
 // get sick leave request
 exports.getSicknessRequest = catchAsync(async (req, res, next) => {
   const { admin_id, tenantId } = req;
-
+  console.log(req.body);
   if (!tenantId) {
     return next(new AppError("tenant-id missing", 400));
   }
@@ -162,6 +171,15 @@ exports.getSicknessRequest = catchAsync(async (req, res, next) => {
   if (Array.isArray(w_id) && w_id.length > 0) {
     workerObjectIds = w_id.map((id) => new mongoose.Types.ObjectId(id));
     query.workerId = { $in: workerObjectIds };
+  }
+  if (req.body?.date) {
+    const filterDate = new Date(req.body.date);
+
+    // optional but recommended
+    filterDate.setHours(0, 0, 0, 0);
+
+    query["duration.startDate"] = { $lte: filterDate };
+    query["duration.endDate"] = { $gte: filterDate };
   }
   // ================= TOTAL COUNT =================
   const totalRecords = await sicknessModel.countDocuments(query);

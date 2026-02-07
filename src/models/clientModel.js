@@ -64,6 +64,10 @@ const clientSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  isRead: {
+    type: Boolean,
+    default: false,
+  },
 });
 clientSchema.index({ tenantId: 1, createdAt: -1 });
 module.exports = mongoose.model("client", clientSchema);

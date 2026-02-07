@@ -1007,4 +1007,57 @@ exports.getClientNamesForFilter = catchAsync(async (req, res, next) => {
   return sendSuccess(res, "Client Fetch", result, 200, true);
 });
 
-// exports.filters
+// <------ client message isRead ------->
+exports.sendClientMessage = catchAsync(async (req, res, next) => {
+  const { tenantId, client_id } = req;
+  if (!tenantId) {
+    return next(new AppError("tenant missing", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant", 400));
+  }
+  if (!client_id || !mongoose.Types.ObjectId.isValid(client_id)) {
+    return next(new AppError("client id missing or invalid", 400));
+  }
+
+  const client_message = await clientModel
+    .findOne({ _id: client_id, tenantId })
+    .select("sign_our_message isRead");
+  if (!client_message) {
+    return next(new AppError("client message or read not found", 400));
+  }
+  return sendSuccess(
+    res,
+    "success",
+    {
+      sign_message: client_message.sign_our_message,
+      isRead: client_message.isRead,
+    },
+    200,
+    true,
+  );
+});
+
+// <----- isRead update ------>
+
+exports.updateIsReady = catchAsync(async (req, res, nexg) => {
+  const { tenantId, client_id } = req;
+  if (!tenantId) {
+    return next(new AppError("tenant missing", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant", 400));
+  }
+  if (!client_id || !mongoose.Types.ObjectId.isValid(client_id)) {
+    return next(new AppError("client id missing or invalid", 400));
+  }
+  const update = await clientModel.findOneAndUpdate(
+    { _id: client_id, tenantId },
+    { $set: { isRead: true } },
+    { new: true },
+  );
+  if (!update) {
+    return next(new AppError("client not found", 400));
+  }
+  return sendSuccess(res, "success", {}, 201, true);
+});

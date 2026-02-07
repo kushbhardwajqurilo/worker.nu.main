@@ -220,7 +220,7 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
   /* ---------- VALIDATION ---------- */
   if (!workerId) workerId = req.worker_id;
 
-  if (!!mongoose.isValidObjectId(parsedWorkerId)) {
+  if (!mongoose.isValidObjectId(parsedWorkerId)) {
     return next(new AppError("Invalid workerId", 400));
   }
 
@@ -1035,6 +1035,141 @@ exports.getSingleHoursDetailsController = catchAsync(async (req, res, next) => {
 // });
 
 //  get single worker hours for weekly
+// exports.getSingleWorkerWeeklyHoursController = catchAsync(
+//   async (req, res, next) => {
+//     const { tenantId } = req;
+//     const { workerId } = req.query;
+//     const weekOffset = Number(req.query.weekOffset) || 0;
+
+//     /* ---------- VALIDATION ---------- */
+//     if (!tenantId) {
+//       return next(new AppError("Tenant Id missing in headers", 400));
+//     }
+
+//     if (!isValidCustomUUID(tenantId)) {
+//       return next(new AppError("Invalid Tenant-Id", 400));
+//     }
+
+//     if (!workerId) {
+//       return next(new AppError("Worker Id missing", 400));
+//     }
+
+//     /* ---------- WEEK CALCULATION (MON–SUN) ---------- */
+//     const today = new Date();
+//     const day = today.getDay() === 0 ? 7 : today.getDay();
+
+//     const weekStart = new Date(today);
+//     weekStart.setDate(today.getDate() - day + 1 + weekOffset * 7);
+//     weekStart.setHours(0, 0, 0, 0);
+
+//     const weekEnd = new Date(weekStart);
+//     weekEnd.setDate(weekStart.getDate() + 6);
+//     weekEnd.setHours(23, 59, 59, 999);
+//     /* ---------- FETCH DATA ---------- */
+//     const hoursData = await hoursModel
+//       .find({
+//         tenantId,
+//         workerId,
+//         createdAt: { $gte: weekStart, $lte: weekEnd },
+//       })
+//       .populate([
+//         {
+//           path: "project.projectId",
+//           select:
+//             "project_details.project_name project_details.project_location_address",
+//         },
+//         {
+//           path: "workerId",
+//           select:
+//             "worker_personal_details.firstName worker_personal_details.lastName worker_position personal_information.documents.profile_picture",
+//           populate: {
+//             path: "worker_position",
+//             select: "position",
+//           },
+//         },
+//       ])
+//       .sort({ createdAt: -1 })
+//       .lean();
+
+//     /* ---------- HOURS FORMATTER ---------- */
+//     const formatHours = (decimalHours = 0) => {
+//       const hours = Math.floor(decimalHours);
+//       const minutes = Math.round((decimalHours - hours) * 60);
+
+//       return {
+//         decimal: decimalHours.toFixed(2),
+//         hours,
+//         minutes,
+//         label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
+//       };
+//     };
+
+//     /* ---------- TRANSFORM DATA ---------- */
+//     const finalData = hoursData.map((obj) => {
+//       const lateResult = calculateLateByProjectEnd({
+//         projectDate: obj.project?.project_date,
+//         finishHours: obj.finish_hours,
+//         submittedAt: obj.createdAt,
+//         dayOff: obj.day_off,
+//         graceMinutes: 0, // configurable
+//       });
+
+//       return {
+//         _id: obj._id,
+//         date: obj.createdAt,
+
+//         worker: obj.workerId
+//           ? {
+//               _id: obj.workerId._id,
+//               firstName: obj.workerId.worker_personal_details?.firstName || "",
+//               lastName: obj.workerId.worker_personal_details?.lastName || "",
+//               position: obj.workerId.worker_position?.[0]?.position || "",
+//               profile_picture:
+//                 obj.workerId.personal_information.documents.profile_picture,
+//             }
+//           : null,
+
+//         project: obj.project?.projectId
+//           ? {
+//               _id: obj.project.projectId._id,
+//               project_name:
+//                 obj.project.projectId?.project_details?.project_name || "",
+//               project_date: obj.project.project_date || "",
+//               address:
+//                 obj.project.projectId.project_details
+//                   ?.project_location_address || "",
+//             }
+//           : null,
+
+//         start_working_hours: obj.start_working_hours,
+//         finish_hours: obj.finish_hours,
+//         break_time: obj.break_time,
+//         day_off: obj.day_off,
+//         weekNumber: obj.weekNumber,
+//         status: obj.status,
+//         comments: obj.comments,
+//         image: obj.images,
+//         createdBy: obj?.createdBy || "",
+//         total_hours: formatHours(obj.total_hours),
+
+//         lateReason: obj?.lateReason,
+//         is_late: lateResult.isLate,
+//         late_time: lateResult.lateTime,
+//         late_minutes: lateResult.lateMinutes,
+//       };
+//     });
+
+//     /* ---------- RESPONSE ---------- */
+//     return sendSuccess(
+//       res,
+//       "Worker weekly hours fetched successfully",
+//       finalData,
+//       200,
+//       true,
+//     );
+//   },
+// );
+
 exports.getSingleWorkerWeeklyHoursController = catchAsync(
   async (req, res, next) => {
     const { tenantId } = req;
@@ -1070,7 +1205,7 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
       .find({
         tenantId,
         workerId,
-        createdAt: { $gte: weekStart, $lte: weekEnd },
+        "project.project_date": { $gte: weekStart, $lte: weekEnd },
       })
       .populate([
         {
@@ -2194,7 +2329,6 @@ exports.checkSubmitHoursOnDateForClientWorker = catchAsync(
 exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
   const { p_id, w_id, status, date } = req.body;
-  console.log("tme sheet", { p_id, status, date });
   if (!tenantId) return next(new AppError("Tenant-id missing", 400));
   if (!Array.isArray(p_id) || !p_id.length)
     return next(new AppError("Invalid Project Id", 400));
@@ -2243,7 +2377,7 @@ exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
       // Position join
       {
         $lookup: {
-          from: "positions",
+          from: "worker_positions",
           localField: "worker.worker_position",
           foreignField: "_id",
           as: "position",
@@ -2335,7 +2469,6 @@ exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
     path.join(process.cwd(), "src/templates/weeklyTimeSheet.html"),
     "utf8",
   );
-
   const showSignature = status === "approved";
 
   const pagesHtml = groupedData
@@ -2437,17 +2570,23 @@ exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
 // <----------- worker project hours for excel sheet start ----------->
 // helping function
 
-const generateDateRange = (start, end) => {
+function generateDateRange(startDate, endDate) {
   const dates = [];
-  const current = new Date(start);
+  let current = new Date(startDate);
+  const last = new Date(endDate);
 
-  while (current <= end) {
-    dates.push(current.toISOString().split("T")[0]);
+  while (current <= last) {
+    dates.push(
+      current.toLocaleDateString("en-CA", {
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }),
+    );
+
     current.setDate(current.getDate() + 1);
   }
 
   return dates;
-};
+}
 
 exports.workerAllProjectHoursDataForExcel = catchAsync(
   async (req, res, next) => {
@@ -2455,6 +2594,7 @@ exports.workerAllProjectHoursDataForExcel = catchAsync(
     const { p_id } = req.body;
 
     if (!tenantId) return next(new AppError("Tenant-id missing", 400));
+
     if (!Array.isArray(p_id) || p_id.length === 0)
       return next(new AppError("Project Required", 400));
 
@@ -2478,7 +2618,6 @@ exports.workerAllProjectHoursDataForExcel = catchAsync(
         },
       },
       { $unwind: "$worker" },
-
       {
         $project: {
           workerName: {
@@ -2492,14 +2631,7 @@ exports.workerAllProjectHoursDataForExcel = catchAsync(
               },
             },
           },
-
-          projectDate: {
-            $dateToString: {
-              format: "%Y-%m-%d",
-              date: "$project.project_date",
-            },
-          },
-
+          projectDate: "$project.project_date", // ✅ RAW DATE
           total_hours: 1,
         },
       },
@@ -2510,8 +2642,8 @@ exports.workerAllProjectHoursDataForExcel = catchAsync(
         res,
         "success",
         {
-          minDate: null,
-          maxDate: null,
+          startDate: null,
+          endDate: null,
           workers: [],
         },
         200,
@@ -2519,23 +2651,34 @@ exports.workerAllProjectHoursDataForExcel = catchAsync(
       );
     }
 
-    /* ---------------- MIN / MAX DATE ---------------- */
+    /* ---------------- FORMAT DATES (BROWSER TIMEZONE) ---------------- */
 
-    const allDates = hoursData.map((d) => new Date(d.projectDate));
+    const formattedRows = hoursData.map((row) => {
+      const formattedDate = new Date(row.projectDate).toLocaleDateString(
+        "en-CA",
+        {
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
+      );
 
-    const minDateObj = new Date(Math.min(...allDates));
-    const maxDateObj = new Date(Math.max(...allDates));
+      return {
+        ...row,
+        projectDate: formattedDate,
+      };
+    });
 
-    const minDate = minDateObj.toISOString().split("T")[0];
-    const maxDate = maxDateObj.toISOString().split("T")[0];
+    const allDates = formattedRows.map((d) => d.projectDate).sort();
 
-    const dateRange = generateDateRange(minDateObj, maxDateObj);
+    const minDate = allDates[0];
+    const maxDate = allDates[allDates.length - 1];
+
+    const dateRange = generateDateRange(minDate, maxDate);
 
     /* ---------------- PIVOT ---------------- */
 
     const workerMap = new Map();
 
-    for (const row of hoursData) {
+    for (const row of formattedRows) {
       if (!workerMap.has(row.workerName)) {
         const dateObj = {};
         dateRange.forEach((d) => (dateObj[d] = null));
@@ -2551,6 +2694,7 @@ exports.workerAllProjectHoursDataForExcel = catchAsync(
     }
 
     const workers = Array.from(workerMap.values());
+
     const finalData = {
       startDate: minDate,
       endDate: maxDate,

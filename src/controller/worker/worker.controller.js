@@ -27,6 +27,7 @@ const {
 } = require("../notifications/notification.controller");
 const { Notification } = require("../../models/reminder.model");
 const parseDottedObject = require("../../utils/parseObject");
+const getWeekRange = require("../../utils/weekRange");
 // ----------------------------------------- ADMIN DASHBOARD API'S -----------------------------------------------
 
 // <---------- Add Worker Start Here ------------>
@@ -305,6 +306,7 @@ exports.addWorker = catchAsync(async (req, res, next) => {
     {
       worker_id: worker._id,
       tenant: tenantId,
+      name: `${worker.worker_personal_details.firstName} ${worker.worker_personal_details.lastName}`,
       role: "worker",
     },
     process.env.WORKER_KEY,
@@ -1188,55 +1190,234 @@ exports.multipleDeleteWorkerController = catchAsync(async (req, res, next) => {
 //   );
 // });
 
+// exports.getAllWorkerController = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid Tenant-id", 400));
+//   }
+
+//   /* ================= PAGINATION ================= */
+//   const page = parseInt(req.query.page, 10) || 1;
+//   const limit = parseInt(req.query.limit, 10) || 5;
+//   const skip = (page - 1) * limit;
+
+//   /* ================= BASE QUERY ================= */
+//   const query = {
+//     tenantId,
+//     isDelete: { $ne: true },
+//     isActive: true,
+//   };
+
+//   /* ================= FILTERS ================= */
+
+//   // Worker filter
+//   if (Array.isArray(req.body?.workerIds) && req.body.workerIds.length > 0) {
+//     query._id = {
+//       $in: req.body.workerIds.map((id) => new mongoose.Types.ObjectId(id)),
+//     };
+//   }
+
+//   // Status filter
+//   if (typeof req?.body?.status === "boolean") {
+//     query.isActive = req.body.status;
+//   }
+
+//   // Worker Position filter
+//   if (
+//     Array.isArray(req.body?.workerPositionIds) &&
+//     req.body.workerPositionIds.length > 0
+//   ) {
+//     query.worker_position = { $in: req.body.workerPositionIds };
+//   }
+
+//   // Project filter
+//   if (Array.isArray(req.body?.projectIds) && req.body.projectIds.length > 0) {
+//     query["project.projectId"] = { $in: req.body.projectIds };
+//   }
+
+//   /* ================= COUNT ================= */
+//   const totalCount = await workerModel.countDocuments(query);
+
+//   if (totalCount === 0) {
+//     return sendSuccess(
+//       res,
+//       "no data found",
+//       {
+//         total: 0,
+//         page,
+//         limit,
+//         totalPage: 0,
+//         worker: [],
+//       },
+//       200,
+//       true,
+//     );
+//   }
+
+//   const totalPage = Math.ceil(totalCount / limit);
+
+//   if (page > totalPage) {
+//     return sendSuccess(
+//       res,
+//       "No page found",
+//       {
+//         total: totalCount,
+//         page,
+//         limit,
+//         totalPage,
+//         worker: [],
+//       },
+//       200,
+//       true,
+//     );
+//   }
+
+//   /* ================= FETCH WORKERS ================= */
+//   const workerList = await workerModel
+//     .find(query)
+//     .sort({ createdAt: -1 })
+//     .skip(skip)
+//     .limit(limit)
+//     .populate([
+//       {
+//         path: "project.projectId",
+//         select: "_id project_details",
+//       },
+//       {
+//         path: "worker_position",
+//         select: "_id position",
+//         match: { isDelete: false },
+//       },
+//     ])
+//     .lean();
+
+//   /* ================= WORKER IDS ================= */
+//   const w_ids = workerList.map((w) => w._id);
+
+//   /* ================= AGGREGATE TOTAL HOURS ================= */
+//   const workerHours = await hoursModel.aggregate([
+//     {
+//       $match: {
+//         tenantId,
+//         workerId: { $in: w_ids },
+//       },
+//     },
+//     {
+//       $group: {
+//         _id: "$workerId",
+//         total_hours: {
+//           $sum: { $ifNull: ["$total_hours", 0] },
+//         },
+//       },
+//     },
+//   ]);
+
+//   /* ================= MAP FOR FAST LOOKUP ================= */
+//   const hoursMap = new Map(
+//     workerHours.map((h) => [h._id.toString(), h.total_hours]),
+//   );
+
+//   /* ================= FORMAT HOURS ================= */
+//   const formatHours = (decimalHours = 0) => {
+//     const hours = Math.floor(decimalHours);
+//     const minutes = Math.round((decimalHours - hours) * 60);
+
+//     // return {
+//     //   decimal: decimalHours.toFixed(2),
+//     //   hours,
+//     //   minutes,
+//     //   label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
+//     // };
+//     return `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`;
+//   };
+
+//   /* ================= FINAL RESPONSE DATA ================= */
+//   const updatedList = workerList.map((worker) => {
+//     // const isExpired =
+//     //   worker.urlAdminExpireAt && Date.now() > worker.urlAdminExpireAt;
+//     const isExpired = false;
+
+//     const totalHours = hoursMap.get(worker._id.toString()) || 0;
+
+//     return {
+//       ...worker,
+
+//       // ✅= PER WORKER TOTAL HOURS
+//       hours: formatHours(totalHours),
+
+//       project: Array.isArray(worker.project)
+//         ? worker.project.map((p) => ({
+//             _id: p._id,
+//             projectId: p.projectId?._id || null,
+//             project_name: p.projectId?.project_details?.project_name || null,
+//           }))
+//         : [],
+
+//       dashboardUrl:
+//         !isExpired && worker.urlVisibleToAdmin ? worker.dashboardUrl : null,
+//       urlVisibleToAdmin: !isExpired && worker.urlVisibleToAdmin,
+//     };
+//   });
+
+//   /* ================= RESPONSE ================= */
+//   return sendSuccess(
+//     res,
+//     "data found",
+//     {
+//       total: totalCount,
+//       page,
+//       limit,
+//       totalPage,
+//       worker: updatedList,
+//     },
+//     200,
+//     true,
+//   );
+// });
 exports.getAllWorkerController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
-
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant-id", 400));
   }
-
   /* ================= PAGINATION ================= */
   const page = parseInt(req.query.page, 10) || 1;
   const limit = parseInt(req.query.limit, 10) || 5;
   const skip = (page - 1) * limit;
-
   /* ================= BASE QUERY ================= */
   const query = {
     tenantId,
     isDelete: { $ne: true },
     isActive: true,
   };
-
   /* ================= FILTERS ================= */
-
-  // Worker filter
   if (Array.isArray(req.body?.workerIds) && req.body.workerIds.length > 0) {
     query._id = {
       $in: req.body.workerIds.map((id) => new mongoose.Types.ObjectId(id)),
     };
   }
-
-  // Status filter
-  if (typeof req?.body?.status === "boolean") {
+  if (typeof req.body?.status === "boolean") {
     query.isActive = req.body.status;
   }
-
-  // Worker Position filter
   if (
     Array.isArray(req.body?.workerPositionIds) &&
     req.body.workerPositionIds.length > 0
   ) {
-    query.worker_position = { $in: req.body.workerPositionIds };
+    query.worker_position = {
+      $elemMatch: {
+        $in: req.body.workerPositionIds.map(
+          (id) => new mongoose.Types.ObjectId(id),
+        ),
+      },
+    };
   }
-
-  // Project filter
   if (Array.isArray(req.body?.projectIds) && req.body.projectIds.length > 0) {
-    query["project.projectId"] = { $in: req.body.projectIds };
+    query["project.projectId"] = {
+      $in: req.body.projectIds.map((id) => new mongoose.Types.ObjectId(id)),
+    };
   }
-
   /* ================= COUNT ================= */
   const totalCount = await workerModel.countDocuments(query);
-
   if (totalCount === 0) {
     return sendSuccess(
       res,
@@ -1252,9 +1433,7 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
       true,
     );
   }
-
   const totalPage = Math.ceil(totalCount / limit);
-
   if (page > totalPage) {
     return sendSuccess(
       res,
@@ -1270,30 +1449,84 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
       true,
     );
   }
-
   /* ================= FETCH WORKERS ================= */
-  const workerList = await workerModel
-    .find(query)
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .populate([
-      {
-        path: "project.projectId",
-        select: "_id project_details",
+  const workerList = await workerModel.aggregate([
+    { $match: query },
+    { $sort: { createdAt: -1 } },
+    { $skip: skip },
+    { $limit: limit },
+    /* ---------- PROJECT POPULATE ---------- */
+    {
+      $lookup: {
+        from: "projects",
+        localField: "project.projectId",
+        foreignField: "_id",
+        as: "projectDocs",
+        pipeline: [{ $project: { _id: 1, project_details: 1 } }],
       },
-      {
-        path: "worker_position",
-        select: "_id position",
-        match: { isDelete: false },
+    },
+    {
+      $addFields: {
+        project: {
+          $map: {
+            input: "$project",
+            as: "p",
+            in: {
+              $mergeObjects: [
+                "$$p",
+                {
+                  projectId: {
+                    $arrayElemAt: [
+                      {
+                        $filter: {
+                          input: "$projectDocs",
+                          as: "pd",
+                          cond: {
+                            $eq: ["$$pd._id", "$$p.projectId"],
+                          },
+                        },
+                      },
+                      0,
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        },
       },
-    ])
-    .lean();
+    },
+    { $project: { projectDocs: 0 } },
+    /* ---------- WORKER POSITION (ARRAY → INDEX 0 → ARRAY OUT) ---------- */
+    {
+      $addFields: {
+        workerPositionId: {
+          $arrayElemAt: ["$worker_position", 0],
+        },
+      },
+    },
+    {
+      $lookup: {
+        from: "worker_positions",
+        localField: "workerPositionId",
+        foreignField: "_id",
+        as: "worker_position",
+        pipeline: [
+          { $match: { isDelete: false } },
+          { $project: { _id: 1, position: 1 } },
+        ],
+      },
+    },
+    {
+      $project: {
+        workerPositionId: 0,
+      },
+    },
+  ]);
 
   /* ================= WORKER IDS ================= */
   const w_ids = workerList.map((w) => w._id);
-
-  /* ================= AGGREGATE TOTAL HOURS ================= */
+  /* ================= TOTAL HOURS ================= */
   const workerHours = await hoursModel.aggregate([
     {
       $match: {
@@ -1310,40 +1543,21 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
       },
     },
   ]);
-
-  /* ================= MAP FOR FAST LOOKUP ================= */
   const hoursMap = new Map(
     workerHours.map((h) => [h._id.toString(), h.total_hours]),
   );
-
-  /* ================= FORMAT HOURS ================= */
-  const formatHours = (decimalHours = 0) => {
-    const hours = Math.floor(decimalHours);
-    const minutes = Math.round((decimalHours - hours) * 60);
-
-    // return {
-    //   decimal: decimalHours.toFixed(2),
-    //   hours,
-    //   minutes,
-    //   label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
-    // };
-    return `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`;
+  const formatHours = (decimal = 0) => {
+    const h = Math.floor(decimal);
+    const m = Math.round((decimal - h) * 60);
+    return `${decimal.toFixed(2)} h (${h}h ${m}min)`;
   };
-
-  /* ================= FINAL RESPONSE DATA ================= */
+  /* ================= FINAL RESPONSE ================= */
   const updatedList = workerList.map((worker) => {
-    // const isExpired =
-    //   worker.urlAdminExpireAt && Date.now() > worker.urlAdminExpireAt;
-    const isExpired = false;
-
     const totalHours = hoursMap.get(worker._id.toString()) || 0;
-
+    const isExpired = false;
     return {
       ...worker,
-
-      //  PER WORKER TOTAL HOURS
       hours: formatHours(totalHours),
-
       project: Array.isArray(worker.project)
         ? worker.project.map((p) => ({
             _id: p._id,
@@ -1351,14 +1565,11 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
             project_name: p.projectId?.project_details?.project_name || null,
           }))
         : [],
-
       dashboardUrl:
         !isExpired && worker.urlVisibleToAdmin ? worker.dashboardUrl : null,
       urlVisibleToAdmin: !isExpired && worker.urlVisibleToAdmin,
     };
   });
-
-  /* ================= RESPONSE ================= */
   return sendSuccess(
     res,
     "data found",
@@ -1373,7 +1584,6 @@ exports.getAllWorkerController = catchAsync(async (req, res, next) => {
     true,
   );
 });
-
 // <---------- get all worker list end here -------------->
 
 // <---------- make inactive worker ------------>
@@ -1576,11 +1786,148 @@ exports.getAllProjectsToWorkerAddController = catchAsync(
 //     true,
 //   );
 // });
+// exports.requestLeave = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+//   const { range, reason, leaveType, workerIds: bodyWorkerIds } = req.body;
+//   console.log("rnage", range,leaveType);
+//   /* ---------- TENANT VALIDATION ---------- */
+//   if (!tenantId) {
+//     return next(new AppError("tenant-id missing", 400));
+//   }
+
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid tenant-id", 400));
+//   }
+
+//   /* ---------- WORKER ID NORMALIZATION ---------- */
+//   let workerIds = [];
+
+//   // Multiple workers → BODY
+//   if (Array.isArray(bodyWorkerIds) && bodyWorkerIds.length > 0) {
+//     workerIds = bodyWorkerIds;
+//   }
+//   // Single worker → req.worker_id
+//   else if (req.worker_id) {
+//     workerIds = [req.worker_id];
+//   }
+
+//   if (!workerIds.length) {
+//     return next(new AppError("worker_id missing", 400));
+//   }
+
+//   /* ---------- WORKER ID VALIDATION ---------- */
+//   workerIds = workerIds.map((wid) => {
+//     if (!mongoose.Types.ObjectId.isValid(wid)) {
+//       throw new AppError(`Invalid worker_id: ${wid}`, 400);
+//     }
+//     return new mongoose.Types.ObjectId(wid);
+//   });
+
+//   /* ---------- BODY VALIDATION ---------- */
+//   if (!leaveType || !["holiday", "sickness"].includes(leaveType)) {
+//     return next(new AppError("Invalid leaveType (holiday | sickness)", 400));
+//   }
+
+//   if (!range || !range.startDate || !range.endDate || !reason) {
+//     return next(
+//       new AppError("startDate, endDate and reason are required", 400),
+//     );
+//   }
+
+//   /* ---------- DATE PARSING (SUPPORT DD/MM/YYYY) ---------- */
+//   const parseDDMMYYYY = (str) => {
+//     const [d, m, y] = str.split("/").map(Number);
+//     return new Date(y, m - 1, d);
+//   };
+
+//   let startDate, endDate;
+
+//   if (range.startDate.includes("/")) {
+//     startDate = parseDDMMYYYY(range.startDate);
+//     endDate = parseDDMMYYYY(range.endDate);
+//   } else {
+//     startDate = new Date(range.startDate);
+//     endDate = new Date(range.endDate);
+//   }
+
+//   if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+//     return next(new AppError("Invalid startDate or endDate", 400));
+//   }
+
+//   if (startDate > endDate) {
+//     return next(new AppError("startDate cannot be greater than endDate", 400));
+//   }
+
+//   /* ---------- WORKER CHECK ---------- */
+//   const workers = await workerModel.find({
+//     tenantId,
+//     _id: { $in: workerIds },
+//     isDelete: false,
+//     isActive: true,
+//   });
+
+//   if (workers.length !== workerIds.length) {
+//     return next(new AppError("One or more workers not found or inactive", 400));
+//   }
+
+//   /* ---------- TOTAL DAYS ---------- */
+//   const totalDays =
+//     Math.floor(
+//       (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+//     ) + 1;
+
+//   /* ---------- BASE PAYLOAD (SINGLE SOURCE OF TRUTH) ---------- */
+//   const basePayload = workerIds.map((wid) => ({
+//     tenantId,
+//     workerId: wid,
+//     duration: {
+//       startDate,
+//       endDate,
+//       totalDays,
+//     },
+//   }));
+
+//   let leaveRequest;
+
+//   /* ---------- INSERT ---------- */
+//   if (leaveType === "holiday") {
+//     leaveRequest =
+//       workerIds.length === 1
+//         ? await holidayModel.create({
+//             ...basePayload[0],
+//             reason,
+//           })
+//         : await holidayModel.insertMany(
+//             basePayload.map((p) => ({ ...p, reason })),
+//           );
+//   }
+
+//   if (leaveType === "sickness") {
+//     leaveRequest =
+//       workerIds.length === 1
+//         ? await sicknessModel.create({
+//             ...basePayload[0],
+//             description: reason,
+//           })
+//         : await sicknessModel.insertMany(
+//             basePayload.map((p) => ({ ...p, description: reason })),
+//           );
+//   }
+
+//   /* ---------- RESPONSE ---------- */
+//   return sendSuccess(
+//     res,
+//     "Leave request submitted successfully",
+//     leaveRequest,
+//     201,
+//     true,
+//   );
+// });
+
 exports.requestLeave = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
-  const { range, reason, leaveType, workerIds: bodyWorkerIds } = req.body;
+  const { leaveType, reason, range, workerIds: bodyWorkerIds } = req.body;
 
-  /* ---------- TENANT VALIDATION ---------- */
   if (!tenantId) {
     return next(new AppError("tenant-id missing", 400));
   }
@@ -1592,12 +1939,9 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
   /* ---------- WORKER ID NORMALIZATION ---------- */
   let workerIds = [];
 
-  // Multiple workers → BODY
   if (Array.isArray(bodyWorkerIds) && bodyWorkerIds.length > 0) {
     workerIds = bodyWorkerIds;
-  }
-  // Single worker → req.worker_id
-  else if (req.worker_id) {
+  } else if (req.worker_id) {
     workerIds = [req.worker_id];
   }
 
@@ -1605,10 +1949,9 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
     return next(new AppError("worker_id missing", 400));
   }
 
-  /* ---------- WORKER ID VALIDATION ---------- */
   workerIds = workerIds.map((wid) => {
     if (!mongoose.Types.ObjectId.isValid(wid)) {
-      throw new AppError(`Invalid worker_id: ${wid}`, 400);
+      return next(new AppError(`Invalid worker_id: ${wid}`, 400));
     }
     return new mongoose.Types.ObjectId(wid);
   });
@@ -1618,90 +1961,92 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
     return next(new AppError("Invalid leaveType (holiday | sickness)", 400));
   }
 
-  if (!range || !range.startDate || !range.endDate || !reason) {
-    return next(
-      new AppError("startDate, endDate and reason are required", 400),
+  if (!reason) {
+    return next(new AppError("reason is required", 400));
+  }
+
+  /* ---------- DATE RANGE HANDLING (optional) ---------- */
+  let startDate;
+  let endDate;
+  let totalDays = 1;
+
+  if (range && range.startDate && range.endDate) {
+    // Parse the date string the client sent (any timezone)
+    const startInput = new Date(range.startDate);
+    const endInput = new Date(range.endDate);
+
+    if (isNaN(startInput.getTime()) || isNaN(endInput.getTime())) {
+      return next(new AppError("Invalid startDate or endDate format", 400));
+    }
+
+    if (startInput > endInput) {
+      return next(new AppError("startDate cannot be later than endDate", 400));
+    }
+
+    // ────────────────────────────────────────────────
+    // MOST IMPORTANT PART: use local date parts (not UTC)
+    // This preserves "what the user saw / intended"
+    // ────────────────────────────────────────────────
+    startDate = new Date(
+      Date.UTC(
+        startInput.getFullYear(),
+        startInput.getMonth(),
+        startInput.getDate(),
+      ),
     );
-  }
 
-  /* ---------- DATE PARSING (SUPPORT DD/MM/YYYY) ---------- */
-  const parseDDMMYYYY = (str) => {
-    const [d, m, y] = str.split("/").map(Number);
-    return new Date(y, m - 1, d);
-  };
+    endDate = new Date(
+      Date.UTC(endInput.getFullYear(), endInput.getMonth(), endInput.getDate()),
+    );
 
-  let startDate, endDate;
-
-  if (range.startDate.includes("/")) {
-    startDate = parseDDMMYYYY(range.startDate);
-    endDate = parseDDMMYYYY(range.endDate);
+    // Calculate number of calendar days (inclusive)
+    const diffMs = endDate - startDate;
+    totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
   } else {
-    startDate = new Date(range.startDate);
-    endDate = new Date(range.endDate);
+    // No range → today (single day)
+    const today = new Date();
+    startDate = new Date(
+      Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()),
+    );
+    endDate = startDate;
+    totalDays = 1;
   }
 
-  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-    return next(new AppError("Invalid startDate or endDate", 400));
-  }
-
-  if (startDate > endDate) {
-    return next(new AppError("startDate cannot be greater than endDate", 400));
-  }
-
-  /* ---------- WORKER CHECK ---------- */
-  const workers = await workerModel.find({
-    tenantId,
-    _id: { $in: workerIds },
-    isDelete: false,
-    isActive: true,
-  });
+  /* ---------- WORKER EXISTENCE CHECK ---------- */
+  const workers = await workerModel
+    .find({
+      tenantId,
+      _id: { $in: workerIds },
+      isDelete: false,
+      isActive: true,
+    })
+    .lean();
 
   if (workers.length !== workerIds.length) {
     return next(new AppError("One or more workers not found or inactive", 400));
   }
 
-  /* ---------- TOTAL DAYS ---------- */
-  const totalDays =
-    Math.floor(
-      (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
-    ) + 1;
+  /* ---------- MODEL SELECTION ---------- */
+  const LeaveModel = leaveType === "holiday" ? holidayModel : sicknessModel;
 
-  /* ---------- BASE PAYLOAD (SINGLE SOURCE OF TRUTH) ---------- */
-  const basePayload = workerIds.map((wid) => ({
+  /* ---------- PAYLOAD ---------- */
+  const payload = workerIds.map((wid) => ({
     tenantId,
     workerId: wid,
     duration: {
-      startDate,
+      startDate, // now correctly 2026-02-12 00:00:00Z if client sent Feb 12
       endDate,
       totalDays,
     },
+    ...(leaveType === "holiday" ? { reason } : { description: reason }),
   }));
 
+  /* ---------- SAVE ---------- */
   let leaveRequest;
-
-  /* ---------- INSERT ---------- */
-  if (leaveType === "holiday") {
-    leaveRequest =
-      workerIds.length === 1
-        ? await holidayModel.create({
-            ...basePayload[0],
-            reason,
-          })
-        : await holidayModel.insertMany(
-            basePayload.map((p) => ({ ...p, reason })),
-          );
-  }
-
-  if (leaveType === "sickness") {
-    leaveRequest =
-      workerIds.length === 1
-        ? await sicknessModel.create({
-            ...basePayload[0],
-            description: reason,
-          })
-        : await sicknessModel.insertMany(
-            basePayload.map((p) => ({ ...p, description: reason })),
-          );
+  if (payload.length === 1) {
+    leaveRequest = await LeaveModel.create(payload[0]);
+  } else {
+    leaveRequest = await LeaveModel.create(payload);
   }
 
   /* ---------- RESPONSE ---------- */
@@ -1953,7 +2298,7 @@ exports.isSignWorker = catchAsync(async (req, res, next) => {
 
 exports.getWorkerHolidayDetails = catchAsync(async (req, res, next) => {
   const { tenantId, worker_id } = req;
-  const { leaveType } = req.params;
+  const { leaveType } = req.query;
   if (!tenantId) {
     return next(new AppError("Tenant missing", 400));
   }
@@ -1987,85 +2332,225 @@ exports.getWorkerHolidayDetails = catchAsync(async (req, res, next) => {
 });
 
 // get all hours of worker
+// exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
+//   const { tenantId, worker_id } = req;
+//   if (!tenantId) {
+//     return next(new AppError("Tenant missing", 400));
+//   }
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid Tenant-id", 400));
+//   }
+//   if (!worker_id) {
+//     return next(new AppError("Worker id missing", 400));
+//   }
+//   if (!mongoose.Types.ObjectId.isValid(worker_id)) {
+//     return next(new AppError("Invalid worker id", 400));
+//   }
+
+//   /* ---------- PAGINATION ---------- */
+//   const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
+//   const limit =
+//     Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 10;
+//   const skip = (page - 1) * limit;
+
+//   /* ---------- QUERY ---------- */
+//   const query = {
+//     tenantId,
+//     workerId: worker_id,
+//   };
+//   if (req.body?.startDate && req.body?.end) {
+//     console.log("dddd");
+//     const input = new Date(req.body.startDate);
+//     const sec_input = new Date(req.body.end);
+//     const startOfDay = input.setHours(0, 0, 0, 0);
+//     const endOfDay = sec_input.setHours(23, 59, 59, 999);
+//     query.createdAt = { $gte: startOfDay, $lte: endOfDay };
+//   }
+//   // const
+//   /* ---------- TOTAL COUNT ---------- */
+//   const totalHours = await hoursModel.countDocuments(query);
+
+//   /* ---------- DATA ---------- */
+//   const hours = await hoursModel
+//     .find(query)
+//     .populate({
+//       path: "project.projectId",
+//       select: "project_details.project_name daily_work_hour",
+//     })
+//     .sort({ createdAt: -1 })
+//     .skip(skip)
+//     .limit(limit)
+//     .lean();
+
+//   if (!hours.length) {
+//     return sendSuccess(
+//       res,
+//       "No hours found",
+//       {
+//         total: 0,
+//         page,
+//         limit,
+//         totalPages: 0,
+//         hours: [],
+//       },
+//       200,
+//       true,
+//     );
+//   }
+//   /* ---------- HELPER ---------- */
+//   function calculateTotalHours(start, end) {
+//     const startTime =
+//       start?.shift_start_time?.hours * 60 + start?.shift_start_time?.minutes;
+//     const endTime =
+//       end?.shift_end_time?.hours * 60 + end?.shift_end_time?.minutes;
+//     const diffMinutes = endTime - startTime;
+//     return `${Math.floor(diffMinutes / 60)}h:${diffMinutes % 60}m`;
+//   }
+
+//   /* ---------- RESPONSE DATA ---------- */
+//   const data = hours.map((val) => ({
+//     date: val.project.project_date,
+//     worker_hours: {
+//       submitted_hours: `${extractDate(val.createdAt)} ${
+//         val.start_working_hours.hours
+//       }h:${val.start_working_hours.minutes}m to ${extractDate(
+//         val.createdAt,
+//       )} ${val.finish_hours.hours}h:${val.finish_hours.minutes}m`,
+//       working_hours: `${val.total_hours}h`,
+//       total_working_hour: calculateTotalHours(
+//         val.project.projectId.daily_work_hour,
+//         val.project.projectId.daily_work_hour,
+//       ),
+//     },
+//     break: val.break_time || "",
+//     project: {
+//       project_name: val.project.projectId.project_details.project_name,
+//       comment: val.comments,
+//     },
+//   }));
+
+//   /* ---------- FINAL RESPONSE ---------- */
+//   return sendSuccess(
+//     res,
+//     "Hours fetched successfully",
+//     {
+//       total: totalHours,
+//       page,
+//       limit,
+//       totalPages: Math.ceil(totalHours / limit),
+//       hours: data,
+//     },
+//     200,
+//     true,
+//   );
+// });
+
+// const getWeekRange = (date) => {
+//   const d = new Date(date);
+//   const day = d.getDay() || 7; // Sunday = 7
+
+//   const start = new Date(d);
+//   start.setDate(d.getDate() - day + 1);
+//   start.setHours(0, 0, 0, 0);
+
+//   const end = new Date(start);
+//   end.setDate(start.getDate() + 6);
+//   end.setHours(23, 59, 59, 999);
+
+//   return { start, end };
+// };
+
 exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
   const { tenantId, worker_id } = req;
-  if (!tenantId) {
-    return next(new AppError("Tenant missing", 400));
-  }
-  if (!isValidCustomUUID(tenantId)) {
+
+  /* ---------- VALIDATION ---------- */
+  if (!tenantId) return next(new AppError("Tenant missing", 400));
+  if (!isValidCustomUUID(tenantId))
     return next(new AppError("Invalid Tenant-id", 400));
-  }
-  if (!worker_id) {
-    return next(new AppError("Worker id missing", 400));
-  }
-  if (!mongoose.Types.ObjectId.isValid(worker_id)) {
+  if (!worker_id) return next(new AppError("Worker id missing", 400));
+  if (!mongoose.Types.ObjectId.isValid(worker_id))
     return next(new AppError("Invalid worker id", 400));
-  }
 
   /* ---------- PAGINATION ---------- */
-  const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
-  const limit =
-    Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 10;
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const limit = Math.min(Number(req.query.limit) || 10, 100);
   const skip = (page - 1) * limit;
 
-  /* ---------- QUERY ---------- */
-  const query = {
+  /* ---------- BASE MATCH ---------- */
+  const matchStage = {
     tenantId,
-    workerId: worker_id,
+    workerId: new mongoose.Types.ObjectId(worker_id),
   };
-  if (req.body?.startDate && req.body?.end) {
-    console.log("dddd");
-    const input = new Date(req.body.startDate);
-    const sec_input = new Date(req.body.end);
-    const startOfDay = input.setHours(0, 0, 0, 0);
-    const endOfDay = sec_input.setHours(23, 59, 59, 999);
-    query.createdAt = { $gte: startOfDay, $lte: endOfDay };
-  }
-  // const
-  /* ---------- TOTAL COUNT ---------- */
-  const totalHours = await hoursModel.countDocuments(query);
 
-  /* ---------- DATA ---------- */
-  const hours = await hoursModel
-    .find(query)
-    .populate({
-      path: "project.projectId",
-      select: "project_details.project_name daily_work_hour",
-    })
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .lean();
+  /* ---------- DATE FILTER ---------- */
+  if (req.body?.startDate && req.body?.end) {
+    const start = new Date(req.body.startDate);
+    const end = new Date(req.body.end);
+
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+
+    matchStage.createdAt = { $gte: start, $lte: end };
+  }
+
+  /* ---------- AGGREGATION PIPELINE ---------- */
+  const pipeline = [
+    { $match: matchStage },
+    { $sort: { createdAt: -1 } },
+    {
+      $lookup: {
+        from: "projects",
+        localField: "project.projectId",
+        foreignField: "_id",
+        as: "projectData",
+        pipeline: [
+          {
+            $project: {
+              "project_details.project_name": 1,
+              daily_work_hour: 1,
+            },
+          },
+        ],
+      },
+    },
+    { $unwind: "$projectData" },
+    {
+      $facet: {
+        metadata: [{ $count: "total" }],
+        data: [{ $skip: skip }, { $limit: limit }],
+      },
+    },
+  ];
+
+  /* ---------- EXECUTE IN SINGLE DB ROUND ---------- */
+  const [result] = await hoursModel.aggregate(pipeline).allowDiskUse(true);
+
+  const total = result.metadata[0]?.total || 0;
+  const hours = result.data || [];
 
   if (!hours.length) {
     return sendSuccess(
       res,
       "No hours found",
-      {
-        total: 0,
-        page,
-        limit,
-        totalPages: 0,
-        hours: [],
-      },
+      { total: 0, page, limit, totalPages: 0, hours: [] },
       200,
       true,
     );
   }
 
   /* ---------- HELPER ---------- */
-  function calculateTotalHours(start, end) {
-    const startTime =
-      start?.shift_start_time?.hours * 60 + start?.shift_start_time?.minutes;
-    const endTime =
-      end?.shift_end_time?.hours * 60 + end?.shift_end_time?.minutes;
-    const diffMinutes = endTime - startTime;
-    return `${Math.floor(diffMinutes / 60)}h:${diffMinutes % 60}m`;
-  }
+  const calculateTotalHours = (shift) => {
+    if (!shift) return "0h:0m";
+    const start =
+      shift.shift_start_time.hours * 60 + shift.shift_start_time.minutes;
+    const end = shift.shift_end_time.hours * 60 + shift.shift_end_time.minutes;
+    const diff = end - start;
+    return `${Math.floor(diff / 60)}h:${diff % 60}m`;
+  };
 
-  /* ---------- RESPONSE DATA ---------- */
+  /* ---------- RESPONSE FORMAT (UNCHANGED) ---------- */
   const data = hours.map((val) => ({
-    date: val.createdAt,
+    date: val.project.project_date,
     worker_hours: {
       submitted_hours: `${extractDate(val.createdAt)} ${
         val.start_working_hours.hours
@@ -2073,14 +2558,11 @@ exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
         val.createdAt,
       )} ${val.finish_hours.hours}h:${val.finish_hours.minutes}m`,
       working_hours: `${val.total_hours}h`,
-      total_working_hour: calculateTotalHours(
-        val.project.projectId.daily_work_hour,
-        val.project.projectId.daily_work_hour,
-      ),
+      total_working_hour: calculateTotalHours(val.projectData.daily_work_hour),
     },
     break: val.break_time || "",
     project: {
-      project_name: val.project.projectId.project_details.project_name,
+      project_name: val.projectData.project_details.project_name,
       comment: val.comments,
     },
   }));
@@ -2090,31 +2572,16 @@ exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
     res,
     "Hours fetched successfully",
     {
-      total: totalHours,
+      total,
       page,
       limit,
-      totalPages: Math.ceil(totalHours / limit),
+      totalPages: Math.ceil(total / limit),
       hours: data,
     },
     200,
     true,
   );
 });
-
-const getWeekRange = (date) => {
-  const d = new Date(date);
-  const day = d.getDay() || 7; // Sunday = 7
-
-  const start = new Date(d);
-  start.setDate(d.getDate() - day + 1);
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  end.setHours(23, 59, 59, 999);
-
-  return { start, end };
-};
 
 exports.LastAndThisWeekTotalHours = catchAsync(async (req, res, next) => {
   const { tenantId, worker_id } = req;

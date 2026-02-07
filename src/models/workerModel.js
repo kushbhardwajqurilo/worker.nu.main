@@ -3,7 +3,7 @@ const workerCouterModel = require("./workerCouter.model");
 
 const workerSchema = new mongoose.Schema(
   {
-    id: { type: String, unique: true, index: true },
+    id: { type: String, index: true },
     tenantId: {
       type: String,
       required: [true, "tenant Required"],

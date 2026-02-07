@@ -41,6 +41,11 @@ const adminSchema = new mongoose.Schema({
     },
   },
   phone: { type: String, required: [true, "phone number required"] },
+  timezone: { type: String, default: "" },
+  company_registration_no: { type: String, default: "" },
+  company_address: { type: String, default: "" },
+  logo: { type: String, default: "" },
+
   role: {
     type: String,
     required: [true],

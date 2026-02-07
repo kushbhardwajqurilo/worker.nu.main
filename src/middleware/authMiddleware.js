@@ -24,6 +24,7 @@ const authMiddeware = catchAsync(async (req, res, next) => {
     req.admin_id = decoded.id;
     req.role = decoded.role;
     req.tenantId = decoded.tenant;
+    req.name = decoded.name;
 
     next();
   } catch (err) {
@@ -67,6 +68,7 @@ const clientAuthMiddleware = catchAsync(async (req, res, next) => {
   req.client_id = clientInfo.client_id;
   req.tenantId = clientInfo.tenantId;
   req.role = clientInfo.role;
+  req.name = clientInfo.name;
   next();
 });
 const workerAuthMiddleware = catchAsync(async (req, res, next) => {
@@ -91,6 +93,7 @@ const workerAuthMiddleware = catchAsync(async (req, res, next) => {
   req.worker_id = workerInfo.worker_id;
   req.tenantId = workerInfo.tenant;
   req.role = workerInfo.role;
+  req.name = workerInfo.name;
   next();
 });
 const workerOrAdminAuthMiddleware = async (req, res, next) => {

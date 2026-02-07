@@ -21,7 +21,7 @@ const generateAcessToken = (data) => {
       tenant: data.tenant,
     },
     process.env.ACCESS_TOKEN_KEY,
-    { expiresIn: "15m" },
+    { expiresIn: "30min" },
   );
 };
 
@@ -29,7 +29,7 @@ const generateRefreshToken = async (user, expire) => {
   const refreshToken = jwt.sign(
     { id: user.admin_id, role: user.role, tenant: user.tenant },
     process.env.SECRET_KEY,
-    { expiresIn: expire || "15m" },
+    { expiresIn: expire || "30m" },
   );
 
   // 🔥 One user = one document (UPSERT)

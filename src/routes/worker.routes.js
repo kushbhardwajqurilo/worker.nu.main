@@ -35,6 +35,13 @@ const ImageUpload = require("../middleware/signature.middleware");
 const uploadSignature = require("../middleware/signature.middleware");
 const { uploadDocuments } = require("../middleware/upload.middleware");
 const workerRouter = require("express").Router();
+
+workerRouter.get(
+  "/leave-details",
+  workerAuthMiddleware,
+  accessMiddleware("worker"),
+  getWorkerHolidayDetails,
+);
 workerRouter.post(
   "/add-worker",
   authMiddeware,
@@ -134,12 +141,6 @@ workerRouter.get(
   isSignWorker,
 );
 
-workerRouter.get(
-  "/leave-details/:leaveType",
-  workerAuthMiddleware,
-  accessMiddleware("worker"),
-  getWorkerHolidayDetails,
-);
 workerRouter.post(
   "/worker-all-hours",
   workerAuthMiddleware,

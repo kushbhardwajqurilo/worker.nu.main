@@ -11,6 +11,8 @@ const {
   generateReport,
   weeklyReport,
   getClientNamesForFilter,
+  sendClientMessage,
+  updateIsReady,
 } = require("../controller/client/client.controller");
 const {
   isClientSign,
@@ -102,5 +104,18 @@ clientRouter.get(
   clientAuthMiddleware,
   accessMiddleware("client"),
   getSingleWorkerWeeklyHoursToClientController,
+);
+
+clientRouter.get(
+  "/client-message",
+  clientAuthMiddleware,
+  accessMiddleware("client"),
+  sendClientMessage,
+);
+clientRouter.patch(
+  "/read-update",
+  clientAuthMiddleware,
+  accessMiddleware("client"),
+  updateIsReady,
 );
 module.exports = clientRouter;

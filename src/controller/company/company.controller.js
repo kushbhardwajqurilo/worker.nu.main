@@ -1,14 +1,14 @@
-const { default: mongoose, mongo } = require("mongoose");
-const {
-  companyModel,
-  companyAliasModel,
-} = require("../../models/company.mode");
+const { default: mongoose } = require("mongoose");
+
 const {
   catchAsync,
   AppError,
   sendSuccess,
 } = require("../../utils/errorHandler");
 const { isValidCustomUUID } = require("custom-uuid-generator");
+const companyAliasModel = require("../../models/company.mode");
+const adminModel = require("../../models/authmodel/adminModel");
+// <------- get company details end -------->
 
 exports.addCompanyController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
@@ -36,12 +36,15 @@ exports.addCompanyController = catchAsync(async (req, res, next) => {
   }
 
   const payload = {
-    tenantId,
     ...req.body,
     logo: req.files[0].path,
   };
 
-  const insert = await companyModel.create(payload);
+  const insert = await adminModel.updateOne(
+    { tenantId },
+    { $set: { payload } },
+    { $new: true },
+  );
 
   if (!insert) {
     return next(new AppError("failed to add company", 400));
@@ -49,50 +52,6 @@ exports.addCompanyController = catchAsync(async (req, res, next) => {
 
   return sendSuccess(res, "Company Add Successfull", {}, 200, true);
 });
-
-// <-------- update company  --------->
-exports.updateCompanyController = catchAsync(async (req, res, next) => {
-  const { tenantId } = req;
-
-  // ================= VALIDATION =================
-  if (!isValidCustomUUID(tenantId)) {
-    return next(new AppError("Invalid Tenant-Id", 400));
-  }
-
-  if (!req.body && (!req.files || req.files.length === 0)) {
-    return next(new AppError("Nothing to update", 400));
-  }
-
-  // ================= UPDATE DATA =================
-  const updatedData = { ...req.body };
-
-  // LOGO (form-data)
-  if (req.files?.length) {
-    const logoFile = req.files.find((f) => f.fieldname === "logo");
-    if (logoFile) updatedData.logo = logoFile.path;
-  }
-
-  const result = await companyModel.updateOne(
-    { tenantId },
-    { $set: updatedData }
-  );
-
-  // ================= RESULT HANDLING =================
-  if (result.matchedCount === 0) {
-    return next(new AppError("Company not found for this tenant", 404));
-  }
-
-  // IMPORTANT: modifiedCount 0 is NOT always an error
-  if (result.modifiedCount === 0) {
-    return sendSuccess(res, "No changes detected", {}, 200, true);
-  }
-
-  return sendSuccess(res, "Update Successful", {}, 200, true);
-});
-
-// <-------- update company  end--------->
-
-// <------- get company details -------->
 
 exports.getCompanyDetailController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
@@ -103,24 +62,25 @@ exports.getCompanyDetailController = catchAsync(async (req, res, next) => {
   if (!req.query || req.query.length === 0) {
     return next(new AppError("company credentails missing"));
   }
-  const find = await companyModel.findOne({ tenantId });
+  const find = await adminModel
+    .findOne({ tenantId })
+    .select(
+      "logo company_name phone timezone company_registration_no company_address ",
+    );
   if (!find || find.length === 0) {
     return next(new AppError("failed to fatch", 400));
   }
   return sendSuccess(res, "success", [find], 200, true);
 });
 
-// <------- get company details end -------->
-
 // <-------- Company Alias ----------->
 
 exports.addCompanyAlias = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
-
-  // ================= BASIC VALIDATION =================
-  if (!isValidCustomUUID(tenantId)) {
-    return next(new AppError("Invalid Tenant-Id", 400));
-  }
+  console.log("ss", tenantId);
+  // if (!isValidCustomUUID(tenantId)) {
+  //   return next(new AppError("Invalid Tenant-Id", 400));
+  // }
 
   if (!req.body || Object.keys(req.body).length === 0) {
     return next(new AppError("company alias missing", 400));
@@ -149,11 +109,10 @@ exports.addCompanyAlias = catchAsync(async (req, res, next) => {
   }
   const payload = {
     tenantId,
-    company_alias: {
-      ...req.body,
-      tenantId,
-      logo: logoFile.path, // cloudinary URL
-    },
+
+    ...req.body,
+
+    logo: logoFile.path, // cloudinary URL
   };
   await companyAliasModel.create(payload);
 
@@ -197,31 +156,44 @@ exports.getSingleCompanyAliasController = catchAsync(async (req, res, next) => {
 // update company alias
 exports.updateCompanyAliasController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
-  // ================= BASIC VALIDATION =================
-  if (!isValidCustomUUID(tenantId)) {
-    return next(new AppError("Invalid Tenant-Id", 400));
+  console.log("ss", tenantId);
+  // if (!isValidCustomUUID(tenantId)) {
+  //   return next(new AppError("Invalid Tenant-Id", 400));
+  // }
+
+  if (!req.body || Object.keys(req.body).length === 0) {
+    return next(new AppError("company alias missing", 400));
   }
-  // c_id means company alias Object Id(_id)
-  const { c_id } = req.query;
-  if (!c_id || c_id.length === 0) {
-    return next(new AppError("company id missing", 400));
+  const requiredFields = [
+    "company_name",
+    "phone",
+    "company_registration_no",
+    "company_address",
+    "language",
+  ];
+
+  for (let field of requiredFields) {
+    if (!req.body[field] || req.body[field].toString().trim().length === 0) {
+      return next(new AppError(`${field} Field Missing`, 400));
+    }
   }
-  if (!mongoose.Types.ObjectId.isValid(c_id)) {
-    return next(new AppError("invalid company id", 400));
+
+  // ================= LOGO FILE =================
+  const logoFile = req.files?.find((file) => file.fieldname === "logo");
+
+  if (!logoFile) {
+    return next(new AppError("logo Field Missing", 400));
   }
-  // is alias exist or not ?
-  const isAlias = await companyAliasModel.findOne({ _id: c_id });
-  if (!isAlias) {
-    return next(new AppError("alias not found.", 400));
-  }
-  const result = await companyAliasModel.updateOne(
-    { tenantId, _id: c_id },
-    req.body
-  );
-  if (result.modifiedCount === 0) {
-    return next(new AppError("failed to update alias"));
-  }
-  return sendSuccess(res, "Alias update", {}, 201, true);
+  const payload = {
+    tenantId,
+
+    ...req.body,
+
+    logo: logoFile.path, // cloudinary URL
+  };
+  await companyAliasModel.create(payload);
+
+  return sendSuccess(res, "Company alias added", {}, 201, true);
 });
 
 // delete company alias
@@ -269,12 +241,12 @@ exports.deleteMultipleCompanyAliasController = catchAsync(
     }
     const result = await companyAliasModel.updateMany(
       { _id: { $in: c_id }, tenantId: { $in: tenantId } },
-      { $set: { isDelete: true } }
+      { $set: { isDelete: true } },
     );
     if (!result || result.modifiedCount === 0) {
       return next(new AppError("failed to delete", 400));
     }
     return sendSuccess(res, "delete success", {}, true, 201);
-  }
+  },
 );
 // <---------- Company Alida End ---------->
