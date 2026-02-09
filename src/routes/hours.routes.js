@@ -91,7 +91,7 @@ hoursRouter.get(
   accessMiddleware("admin"),
   addminDashboardStats,
 );
-hoursRouter.get(
+hoursRouter.post(
   "/single-worker-hour",
   clientOrAdminAuthMiddleware,
   accessMiddleware("admin", "client"),

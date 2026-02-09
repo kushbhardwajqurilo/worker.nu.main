@@ -136,5 +136,10 @@ workerHoursSchema.pre("findOneAndUpdate", async function () {
 
   this.setUpdate(update);
 });
-workerHoursSchema.index({ tenantId: 1, workerId: 1, created: -1 });
+workerHoursSchema.index({
+  tenantId: 1,
+  workerId: 1,
+  "project.project_date": 1,
+  createdAt: 1,
+});
 module.exports = mongoose.model("worker_hours", workerHoursSchema);
