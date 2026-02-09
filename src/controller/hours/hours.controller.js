@@ -2707,231 +2707,231 @@ exports.workerAllProjectHoursDataForExcel = catchAsync(
 
 // <----------- worker project hours for excel sheet end ----------->
 
-exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
-  const { tenantId } = req;
+// exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
 
-  /* ---------- TENANT VALIDATION ---------- */
-  if (!tenantId) {
-    return next(new AppError("Tenant Id missing in headers", 400));
-  }
+//   /* ---------- TENANT VALIDATION ---------- */
+//   if (!tenantId) {
+//     return next(new AppError("Tenant Id missing in headers", 400));
+//   }
 
-  if (!isValidCustomUUID(tenantId)) {
-    return next(new AppError("Invalid Tenant-Id", 400));
-  }
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid Tenant-Id", 400));
+//   }
 
-  /* ---------- PAGINATION ---------- */
-  const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
-  const limit =
-    Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 10;
-  const skip = (page - 1) * limit;
+//   /* ---------- PAGINATION ---------- */
+//   const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
+//   const limit =
+//     Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 10;
+//   const skip = (page - 1) * limit;
 
-  /* ---------- CURRENT WEEK (MON–SUN) ---------- */
-  const today = new Date();
-  const day = today.getDay() === 0 ? 7 : today.getDay();
+//   /* ---------- CURRENT WEEK (MON–SUN) ---------- */
+//   const today = new Date();
+//   const day = today.getDay() === 0 ? 7 : today.getDay();
 
-  const weekStart = new Date(today);
-  weekStart.setDate(today.getDate() - day + 1);
-  weekStart.setHours(0, 0, 0, 0);
+//   const weekStart = new Date(today);
+//   weekStart.setDate(today.getDate() - day + 1);
+//   weekStart.setHours(0, 0, 0, 0);
 
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  weekEnd.setHours(23, 59, 59, 999);
+//   const weekEnd = new Date(weekStart);
+//   weekEnd.setDate(weekStart.getDate() + 6);
+//   weekEnd.setHours(23, 59, 59, 999);
 
-  /* ---------- BUILD QUERY ---------- */
-  const query = { tenantId };
+//   /* ---------- BUILD QUERY ---------- */
+//   const query = { tenantId };
 
-  /* DATE FILTER */
-  if (Array.isArray(req.body?.date) && req.body?.date.length > 0) {
-    const startDate = new Date(req.body.date[0]);
-    const endDate = new Date(req.body.date[1]);
+//   /* DATE FILTER */
+//   if (Array.isArray(req.body?.date) && req.body?.date.length > 0) {
+//     const startDate = new Date(req.body.date[0]);
+//     const endDate = new Date(req.body.date[1]);
 
-    const startOfDay = new Date(startDate);
-    startOfDay.setHours(0, 0, 0, 0);
+//     const startOfDay = new Date(startDate);
+//     startOfDay.setHours(0, 0, 0, 0);
 
-    const endOfDay = new Date(endDate);
-    endOfDay.setHours(23, 59, 59, 999);
+//     const endOfDay = new Date(endDate);
+//     endOfDay.setHours(23, 59, 59, 999);
 
-    query.createdAt = { $gte: startOfDay, $lte: endOfDay };
-  } else {
-    query.createdAt = { $gte: weekStart, $lte: weekEnd };
-  }
+//     query.createdAt = { $gte: startOfDay, $lte: endOfDay };
+//   } else {
+//     query.createdAt = { $gte: weekStart, $lte: weekEnd };
+//   }
 
-  /* STATUS FILTER */
-  if (req.body?.status) {
-    query.status = req.body.status;
-  }
+//   /* STATUS FILTER */
+//   if (req.body?.status) {
+//     query.status = req.body.status;
+//   }
 
-  /* WORKER FILTER */
-  if (Array.isArray(req.body?.workerIds) && req.body.workerIds.length > 0) {
-    query.workerId = {
-      $in: req.body.workerIds.map((id) => new mongoose.Types.ObjectId(id)),
-    };
-  }
+//   /* WORKER FILTER */
+//   if (Array.isArray(req.body?.workerIds) && req.body.workerIds.length > 0) {
+//     query.workerId = {
+//       $in: req.body.workerIds.map((id) => new mongoose.Types.ObjectId(id)),
+//     };
+//   }
 
-  /* PROJECT FILTER */
-  if (Array.isArray(req.body?.projectIds) && req.body.projectIds.length > 0) {
-    query["project.projectId"] = {
-      $in: req.body.projectIds.map((id) => new mongoose.Types.ObjectId(id)),
-    };
-  }
+//   /* PROJECT FILTER */
+//   if (Array.isArray(req.body?.projectIds) && req.body.projectIds.length > 0) {
+//     query["project.projectId"] = {
+//       $in: req.body.projectIds.map((id) => new mongoose.Types.ObjectId(id)),
+//     };
+//   }
 
-  /* ---------- FETCH DATA ---------- */
-  const hoursData = await hoursModel
-    .find(query)
-    .populate([
-      {
-        path: "project.projectId",
-        select: "project_details.project_name",
-      },
-      {
-        path: "workerId",
-        select:
-          "worker_personal_details.firstName worker_personal_details.lastName worker_position personal_information.documents.profile_picture",
-        populate: {
-          path: "worker_position",
-          select: "position",
-        },
-      },
-    ])
-    .sort({ createdAt: -1 })
-    .lean();
+//   /* ---------- FETCH DATA ---------- */
+//   const hoursData = await hoursModel
+//     .find(query)
+//     .populate([
+//       {
+//         path: "project.projectId",
+//         select: "project_details.project_name",
+//       },
+//       {
+//         path: "workerId",
+//         select:
+//           "worker_personal_details.firstName worker_personal_details.lastName worker_position personal_information.documents.profile_picture",
+//         populate: {
+//           path: "worker_position",
+//           select: "position",
+//         },
+//       },
+//     ])
+//     .sort({ createdAt: -1 })
+//     .lean();
 
-  /* ---------- WORKER MAP (LATEST + TOTAL HOURS + LATE CHECK) ---------- */
-  const workerMap = new Map();
+//   /* ---------- WORKER MAP (LATEST + TOTAL HOURS + LATE CHECK) ---------- */
+//   const workerMap = new Map();
 
-  for (const item of hoursData) {
-    const workerKey = item.workerId?._id?.toString();
-    if (!workerKey) continue;
+//   for (const item of hoursData) {
+//     const workerKey = item.workerId?._id?.toString();
+//     if (!workerKey) continue;
 
-    const lateResult = calculateLateHoursByDate({
-      projectDate: item.project?.project_date,
-      createdAt: item.createdAt,
-      dayOff: item.day_off,
-      graceMinutes: 0,
-    });
+//     const lateResult = calculateLateHoursByDate({
+//       projectDate: item.project?.project_date,
+//       createdAt: item.createdAt,
+//       dayOff: item.day_off,
+//       graceMinutes: 0,
+//     });
 
-    if (!workerMap.has(workerKey)) {
-      workerMap.set(workerKey, {
-        latest: item,
-        total_hours_sum: Number(item.total_hours || 0),
-        is_late: lateResult.isLate,
-        late_minutes: lateResult.lateMinutes,
-        late_time: lateResult.lateTime,
-      });
-    } else {
-      const existing = workerMap.get(workerKey);
+//     if (!workerMap.has(workerKey)) {
+//       workerMap.set(workerKey, {
+//         latest: item,
+//         total_hours_sum: Number(item.total_hours || 0),
+//         is_late: lateResult.isLate,
+//         late_minutes: lateResult.lateMinutes,
+//         late_time: lateResult.lateTime,
+//       });
+//     } else {
+//       const existing = workerMap.get(workerKey);
 
-      //  per worker total hours sum
-      existing.total_hours_sum += Number(item.total_hours || 0);
+//       //  per worker total hours sum
+//       existing.total_hours_sum += Number(item.total_hours || 0);
 
-      // late logic unchanged
-      if (lateResult.isLate) {
-        existing.is_late = true;
+//       // late logic unchanged
+//       if (lateResult.isLate) {
+//         existing.is_late = true;
 
-        if (lateResult.lateMinutes > existing.late_minutes) {
-          existing.late_minutes = lateResult.lateMinutes;
-          existing.late_time = lateResult.lateTime;
-        }
-      }
-    }
-  }
+//         if (lateResult.lateMinutes > existing.late_minutes) {
+//           existing.late_minutes = lateResult.lateMinutes;
+//           existing.late_time = lateResult.lateTime;
+//         }
+//       }
+//     }
+//   }
 
-  /* ---------- HOURS FORMATTER ---------- */
-  const formatHours = (decimalHours = 0) => {
-    const hours = Math.floor(decimalHours);
-    const minutes = Math.round((decimalHours - hours) * 60);
+//   /* ---------- HOURS FORMATTER ---------- */
+//   const formatHours = (decimalHours = 0) => {
+//     const hours = Math.floor(decimalHours);
+//     const minutes = Math.round((decimalHours - hours) * 60);
 
-    return {
-      decimal: decimalHours.toFixed(2),
-      hours,
-      minutes,
-      label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
-    };
-  };
+//     return {
+//       decimal: decimalHours.toFixed(2),
+//       hours,
+//       minutes,
+//       label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
+//     };
+//   };
 
-  /* ---------- WEEK RANGE LABEL ---------- */
-  const formatWeekRangeLabel = (startDate, endDate) => {
-    const options = { day: "numeric", month: "short" };
-    return `${new Date(startDate).toLocaleDateString(
-      "en-IN",
-      options,
-    )} - ${new Date(endDate).toLocaleDateString(
-      "en-IN",
-      options,
-    )} ${new Date(endDate).getFullYear()}`;
-  };
+//   /* ---------- WEEK RANGE LABEL ---------- */
+//   const formatWeekRangeLabel = (startDate, endDate) => {
+//     const options = { day: "numeric", month: "short" };
+//     return `${new Date(startDate).toLocaleDateString(
+//       "en-IN",
+//       options,
+//     )} - ${new Date(endDate).toLocaleDateString(
+//       "en-IN",
+//       options,
+//     )} ${new Date(endDate).getFullYear()}`;
+//   };
 
-  /* ---------- TRANSFORM DATA ---------- */
-  const transformedData = Array.from(workerMap.values()).map(
-    ({ latest, total_hours_sum, is_late, late_minutes, late_time }) => ({
-      _id: latest._id,
-      tenantId: latest.tenantId,
+//   /* ---------- TRANSFORM DATA ---------- */
+//   const transformedData = Array.from(workerMap.values()).map(
+//     ({ latest, total_hours_sum, is_late, late_minutes, late_time }) => ({
+//       _id: latest._id,
+//       tenantId: latest.tenantId,
 
-      worker: latest.workerId
-        ? {
-            _id: latest.workerId._id,
-            firstName: latest.workerId.worker_personal_details?.firstName || "",
-            lastName: latest.workerId.worker_personal_details?.lastName || "",
-            position: latest.workerId.worker_position?.[0]?.position || "",
-            profile_picture:
-              latest.workerId.personal_information.documents.profile_picture,
-          }
-        : null,
+//       worker: latest.workerId
+//         ? {
+//             _id: latest.workerId._id,
+//             firstName: latest.workerId.worker_personal_details?.firstName || "",
+//             lastName: latest.workerId.worker_personal_details?.lastName || "",
+//             position: latest.workerId.worker_position?.[0]?.position || "",
+//             profile_picture:
+//               latest.workerId.personal_information.documents.profile_picture,
+//           }
+//         : null,
 
-      project: latest.project?.projectId
-        ? {
-            _id: latest.project.projectId._id,
-            project_name:
-              latest.project.projectId.project_details?.project_name || "",
-            project_date: latest.project.project_date,
-          }
-        : null,
+//       project: latest.project?.projectId
+//         ? {
+//             _id: latest.project.projectId._id,
+//             project_name:
+//               latest.project.projectId.project_details?.project_name || "",
+//             project_date: latest.project.project_date,
+//           }
+//         : null,
 
-      weekNumber: latest.weekNumber,
-      status: latest.status,
-      start_working_hours: latest.start_working_hours,
-      finish_hours: latest.finish_hours,
-      break_time: latest.break_time,
-      comments: latest.comments,
-      image: latest.image,
-      createdAt: latest.createdAt,
-      updatedAt: latest.updatedAt,
-      createdBy: latest.createdBy || "",
+//       weekNumber: latest.weekNumber,
+//       status: latest.status,
+//       start_working_hours: latest.start_working_hours,
+//       finish_hours: latest.finish_hours,
+//       break_time: latest.break_time,
+//       comments: latest.comments,
+//       image: latest.image,
+//       createdAt: latest.createdAt,
+//       updatedAt: latest.updatedAt,
+//       createdBy: latest.createdBy || "",
 
-      // ✅ FINAL PER WORKER TOTAL HOURS
-      total_hours: formatHours(total_hours_sum),
+//       // ✅ FINAL PER WORKER TOTAL HOURS
+//       total_hours: formatHours(total_hours_sum),
 
-      lateReason: latest.lateReason,
-      is_late,
-      late_time,
-      late_minutes,
+//       lateReason: latest.lateReason,
+//       is_late,
+//       late_time,
+//       late_minutes,
 
-      weekRange: {
-        startDate: weekStart.toISOString().split("T")[0],
-        endDate: weekEnd.toISOString().split("T")[0],
-        label: formatWeekRangeLabel(weekStart, weekEnd),
-      },
-    }),
-  );
+//       weekRange: {
+//         startDate: weekStart.toISOString().split("T")[0],
+//         endDate: weekEnd.toISOString().split("T")[0],
+//         label: formatWeekRangeLabel(weekStart, weekEnd),
+//       },
+//     }),
+//   );
 
-  /* ---------- PAGINATION ---------- */
-  const paginatedData = transformedData.slice(skip, skip + limit);
+//   /* ---------- PAGINATION ---------- */
+//   const paginatedData = transformedData.slice(skip, skip + limit);
 
-  /* ---------- RESPONSE ---------- */
-  return sendSuccess(
-    res,
-    "Current week worker hours fetched successfully",
-    {
-      total: transformedData.length,
-      page,
-      limit,
-      totalPages: Math.ceil(transformedData.length / limit),
-      data: paginatedData,
-    },
-    200,
-    true,
-  );
-});
+//   /* ---------- RESPONSE ---------- */
+//   return sendSuccess(
+//     res,
+//     "Current week worker hours fetched successfully",
+//     {
+//       total: transformedData.length,
+//       page,
+//       limit,
+//       totalPages: Math.ceil(transformedData.length / limit),
+//       data: paginatedData,
+//     },
+//     200,
+//     true,
+//   );
+// });
 
 // <---------------- tesing ------------->
 
@@ -3090,28 +3090,28 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
 //       is_late: lateResult.isLate,
 //       late_time: lateResult.lateTime,
 //       late_minutes: lateResult.lateMinutes,
+//       weekRange: {
+//         startDate: weeks[weekIndex].start,
+//         endDate: weeks[weekIndex].end,
+//         label: formatWeekRangeLabel(
+//           weeks[weekIndex].start,
+//           weeks[weekIndex].end,
+//         ),
+//       },
 //     });
 //   }
 
 //   /* ---------- FINAL RESPONSE FORMAT ---------- */
-//   const responseData = [
-//     {
-//       currentWeekAllData: weekBuckets[0],
-//       weekRange: formatWeekRangeLabel(weeks[0].start, weeks[0].end),
-//     },
-//     {
-//       previous1WeekAllData: weekBuckets[1],
-//       weekRange: formatWeekRangeLabel(weeks[1].start, weeks[1].end),
-//     },
-//     {
-//       previous2WeekAllData: weekBuckets[2],
-//       weekRange: formatWeekRangeLabel(weeks[2].start, weeks[2].end),
-//     },
-//     {
-//       previous3WeekAllData: weekBuckets[3],
-//       weekRange: formatWeekRangeLabel(weeks[3].start, weeks[3].end),
-//     },
-//   ];
+//   const responseData = {
+//     startDate: weeks[3].start,
+//     endDate: weeks[0].end,
+//     data: [
+//       ...weekBuckets[0],
+//       ...weekBuckets[1],
+//       ...weekBuckets[2],
+//       ...weekBuckets[3],
+//     ],
+//   };
 
 //   return sendSuccess(
 //     res,
@@ -3121,3 +3121,442 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
 //     true,
 //   );
 // });
+
+// exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+
+//   /* ---------- TENANT VALIDATION ---------- */
+//   if (!tenantId) {
+//     return next(new AppError("Tenant Id missing in headers", 400));
+//   }
+
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid Tenant-Id", 400));
+//   }
+
+//   /* ---------- CURRENT + PREVIOUS 3 WEEKS ---------- */
+//   const today = new Date();
+//   const day = today.getDay() === 0 ? 7 : today.getDay();
+
+//   const baseWeekStart = new Date(today);
+//   baseWeekStart.setDate(today.getDate() - day + 1);
+//   baseWeekStart.setHours(0, 0, 0, 0);
+
+//   const weeks = [];
+
+//   for (let i = 0; i <= 3; i++) {
+//     const start = new Date(baseWeekStart);
+//     start.setDate(baseWeekStart.getDate() - i * 7);
+//     start.setHours(0, 0, 0, 0);
+
+//     const end = new Date(start);
+//     end.setDate(start.getDate() + 6);
+//     end.setHours(23, 59, 59, 999);
+
+//     weeks.push({ start, end });
+//   }
+
+//   /* ---------- BUILD QUERY ---------- */
+//   const query = { tenantId };
+
+//   query.createdAt = {
+//     $gte: weeks[3].start,
+//     $lte: weeks[0].end,
+//   };
+
+//   if (req.body?.status) {
+//     query.status = req.body.status;
+//   }
+
+//   if (Array.isArray(req.body?.workerIds) && req.body.workerIds.length > 0) {
+//     query.workerId = {
+//       $in: req.body.workerIds.map((id) => new mongoose.Types.ObjectId(id)),
+//     };
+//   }
+
+//   if (Array.isArray(req.body?.projectIds) && req.body.projectIds.length > 0) {
+//     query["project.projectId"] = {
+//       $in: req.body.projectIds.map((id) => new mongoose.Types.ObjectId(id)),
+//     };
+//   }
+
+//   /* ---------- FETCH DATA ---------- */
+//   const hoursData = await hoursModel
+//     .find(query)
+//     .populate([
+//       {
+//         path: "project.projectId",
+//         select: "project_details.project_name",
+//       },
+//       {
+//         path: "workerId",
+//         select:
+//           "worker_personal_details.firstName worker_personal_details.lastName worker_position personal_information.documents.profile_picture",
+//         populate: {
+//           path: "worker_position",
+//           select: "position",
+//         },
+//       },
+//     ])
+//     .lean();
+
+//   /* ---------- FORMAT HOURS ---------- */
+//   const formatHours = (decimalHours = 0) => {
+//     const hours = Math.floor(decimalHours);
+//     const minutes = Math.round((decimalHours - hours) * 60);
+
+//     return {
+//       decimal: decimalHours.toFixed(2),
+//       hours,
+//       minutes,
+//       label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
+//     };
+//   };
+
+//   /* ---------- WEEK LABEL ---------- */
+//   const formatWeekRangeLabel = (startDate, endDate) => {
+//     const options = { day: "numeric", month: "short" };
+//     return `${new Date(startDate).toLocaleDateString(
+//       "en-IN",
+//       options,
+//     )} - ${new Date(endDate).toLocaleDateString(
+//       "en-IN",
+//       options,
+//     )} ${new Date(endDate).getFullYear()}`;
+//   };
+
+//   /* ---------- WEEK BUCKETS (Latest Entry + Weekly Sum + Late Logic) ---------- */
+//   const weekBuckets = weeks.map(() => new Map());
+
+//   for (const item of hoursData) {
+//     const itemDate = new Date(item.createdAt);
+
+//     const weekIndex = weeks.findIndex(
+//       (w) => itemDate >= w.start && itemDate <= w.end,
+//     );
+
+//     if (weekIndex === -1) continue;
+
+//     const workerId = item.workerId?._id?.toString();
+//     if (!workerId) continue;
+
+//     const lateResult = calculateLateHoursByDate({
+//       projectDate: item.project?.project_date,
+//       createdAt: item.createdAt,
+//       dayOff: item.day_off,
+//       graceMinutes: 0,
+//     });
+
+//     const weekMap = weekBuckets[weekIndex];
+
+//     if (!weekMap.has(workerId)) {
+//       weekMap.set(workerId, {
+//         latestEntry: item,
+//         total_hours_sum: 0,
+//         is_late: false,
+//         late_minutes: 0,
+//         late_time: null,
+//       });
+//     }
+
+//     const workerData = weekMap.get(workerId);
+
+//     // Sum weekly hours
+//     workerData.total_hours_sum += Number(item.total_hours || 0);
+
+//     // Keep latest entry
+//     if (new Date(item.createdAt) > new Date(workerData.latestEntry.createdAt)) {
+//       workerData.latestEntry = item;
+//     }
+
+//     // Late logic
+//     if (lateResult.isLate) {
+//       workerData.is_late = true;
+
+//       if (lateResult.lateMinutes > workerData.late_minutes) {
+//         workerData.late_minutes = lateResult.lateMinutes;
+//         workerData.late_time = lateResult.lateTime;
+//       }
+//     }
+//   }
+
+//   /* ---------- BUILD FINAL UI FLAT DATA ---------- */
+//   let transformedData = [];
+
+//   weeks.forEach((week, weekIndex) => {
+//     const workers = Array.from(weekBuckets[weekIndex].values());
+
+//     workers.forEach(
+//       ({ latestEntry, total_hours_sum, is_late, late_minutes, late_time }) => {
+//         transformedData.push({
+//           _id: latestEntry._id,
+//           tenantId: latestEntry.tenantId,
+
+//           worker: latestEntry.workerId
+//             ? {
+//                 _id: latestEntry.workerId._id,
+//                 firstName:
+//                   latestEntry.workerId.worker_personal_details?.firstName || "",
+//                 lastName:
+//                   latestEntry.workerId.worker_personal_details?.lastName || "",
+//                 position:
+//                   latestEntry.workerId.worker_position?.[0]?.position || "",
+//                 profile_picture:
+//                   latestEntry.workerId.personal_information?.documents
+//                     ?.profile_picture,
+//               }
+//             : null,
+
+//           project: latestEntry.project?.projectId
+//             ? {
+//                 _id: latestEntry.project.projectId._id,
+//                 project_name:
+//                   latestEntry.project.projectId.project_details?.project_name ||
+//                   "",
+//                 project_date: latestEntry.project.project_date,
+//               }
+//             : null,
+
+//           weekNumber: latestEntry.weekNumber,
+//           status: latestEntry.status,
+//           start_working_hours: latestEntry.start_working_hours,
+//           finish_hours: latestEntry.finish_hours,
+//           break_time: latestEntry.break_time,
+//           comments: latestEntry.comments,
+//           image: latestEntry.image,
+//           createdAt: latestEntry.createdAt,
+//           updatedAt: latestEntry.updatedAt,
+//           createdBy: latestEntry.createdBy || "",
+
+//           total_hours: formatHours(total_hours_sum),
+
+//           lateReason: latestEntry.lateReason,
+//           is_late,
+//           late_time,
+//           late_minutes,
+
+//           weekRange: {
+//             startDate: week.start.toISOString().split("T")[0],
+//             endDate: week.end.toISOString().split("T")[0],
+//             label: formatWeekRangeLabel(week.start, week.end),
+//           },
+//         });
+//       },
+//     );
+//   });
+
+//   /* ---------- RESPONSE ---------- */
+//   return sendSuccess(
+//     res,
+//     "Week-wise latest worker entry with weekly total fetched successfully",
+//     transformedData,
+//     200,
+//     true,
+//   );
+// });
+
+exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+
+  /* ---------- TENANT VALIDATION ---------- */
+  if (!tenantId) {
+    return next(new AppError("Tenant Id missing in headers", 400));
+  }
+
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-Id", 400));
+  }
+
+  /* ---------- PAGINATION ---------- */
+  const page = Number(req.query.page) > 0 ? Number(req.query.page) : 1;
+  const limit =
+    Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 10;
+
+  const skip = (page - 1) * limit;
+
+  /* ---------- CURRENT + PREVIOUS 3 WEEKS ---------- */
+  const today = new Date();
+  const day = today.getDay() === 0 ? 7 : today.getDay();
+
+  const baseWeekStart = new Date(today);
+  baseWeekStart.setDate(today.getDate() - day + 1);
+  baseWeekStart.setHours(0, 0, 0, 0);
+
+  const weeks = [];
+
+  for (let i = 0; i <= 3; i++) {
+    const start = new Date(baseWeekStart);
+    start.setDate(baseWeekStart.getDate() - i * 7);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+
+    weeks.push({ start, end });
+  }
+
+  /* ---------- BUILD QUERY (project_date based) ---------- */
+  const query = { tenantId };
+
+  query["project.project_date"] = {
+    $gte: weeks[3].start,
+    $lte: weeks[0].end,
+  };
+
+  if (req.body?.status) {
+    query.status = req.body.status;
+  }
+
+  if (Array.isArray(req.body?.workerIds) && req.body.workerIds.length > 0) {
+    query.workerId = {
+      $in: req.body.workerIds.map((id) => new mongoose.Types.ObjectId(id)),
+    };
+  }
+
+  if (Array.isArray(req.body?.projectIds) && req.body.projectIds.length > 0) {
+    query["project.projectId"] = {
+      $in: req.body.projectIds.map((id) => new mongoose.Types.ObjectId(id)),
+    };
+  }
+
+  /* ---------- FETCH DATA ---------- */
+  const hoursData = await hoursModel
+    .find(query)
+    .populate([
+      {
+        path: "project.projectId",
+        select: "project_details.project_name",
+      },
+      {
+        path: "workerId",
+        select:
+          "worker_personal_details.firstName worker_personal_details.lastName worker_position personal_information.documents.profile_picture",
+        populate: {
+          path: "worker_position",
+          select: "position",
+        },
+      },
+    ])
+    .lean();
+
+  /* ---------- HELPERS ---------- */
+  const formatHours = (decimalHours = 0) => {
+    const hours = Math.floor(decimalHours);
+    const minutes = Math.round((decimalHours - hours) * 60);
+
+    return {
+      decimal: decimalHours.toFixed(2),
+      hours,
+      minutes,
+      label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
+    };
+  };
+
+  const formatWeekRangeLabel = (startDate, endDate) => {
+    const options = { day: "numeric", month: "short" };
+    return `${new Date(startDate).toLocaleDateString(
+      "en-IN",
+      options,
+    )} - ${new Date(endDate).toLocaleDateString(
+      "en-IN",
+      options,
+    )} ${new Date(endDate).getFullYear()}`;
+  };
+
+  /* ---------- WEEK + WORKER GROUPING ---------- */
+  const transformedData = [];
+
+  weeks.forEach((week) => {
+    const workerMap = new Map();
+
+    hoursData.forEach((item) => {
+      const itemDate = new Date(item.project?.project_date);
+      if (!item.project?.project_date) return;
+
+      if (itemDate >= week.start && itemDate <= week.end) {
+        const workerKey = item.workerId?._id?.toString();
+        if (!workerKey) return;
+
+        if (!workerMap.has(workerKey)) {
+          workerMap.set(workerKey, {
+            latest: item,
+            total_hours_sum: Number(item.total_hours || 0),
+          });
+        } else {
+          const existing = workerMap.get(workerKey);
+
+          existing.total_hours_sum += Number(item.total_hours || 0);
+
+          // 🔥 Compare using project_date
+          if (
+            new Date(item.project.project_date) >
+            new Date(existing.latest.project.project_date)
+          ) {
+            existing.latest = item;
+          }
+        }
+      }
+    });
+
+    workerMap.forEach(({ latest, total_hours_sum }) => {
+      transformedData.push({
+        _id: latest._id,
+        tenantId: latest.tenantId,
+
+        worker: latest.workerId
+          ? {
+              _id: latest.workerId._id,
+              firstName:
+                latest.workerId.worker_personal_details?.firstName || "",
+              lastName: latest.workerId.worker_personal_details?.lastName || "",
+              position: latest.workerId.worker_position?.[0]?.position || "",
+              profile_picture:
+                latest.workerId.personal_information?.documents
+                  ?.profile_picture,
+            }
+          : null,
+
+        project: latest.project?.projectId
+          ? {
+              _id: latest.project.projectId._id,
+              project_name:
+                latest.project.projectId.project_details?.project_name || "",
+              project_date: latest.project.project_date,
+            }
+          : null,
+
+        total_hours: formatHours(total_hours_sum),
+        status: latest.status,
+        createdAt: latest.createdAt,
+        updatedAt: latest.updatedAt,
+        break_time: latest.break_time,
+        weekRange: {
+          startDate: week.start.toISOString().split("T")[0],
+          endDate: week.end.toISOString().split("T")[0],
+          label: formatWeekRangeLabel(week.start, week.end),
+        },
+      });
+    });
+  });
+
+  /* ---------- PAGINATION ---------- */
+  const total = transformedData.length;
+  const totalPages = Math.ceil(total / limit);
+  const paginatedData = transformedData.slice(skip, skip + limit);
+
+  /* ---------- RESPONSE ---------- */
+  return sendSuccess(
+    res,
+    "Week-wise worker hours fetched successfully",
+    {
+      total,
+      page,
+      limit,
+      totalPages,
+      data: paginatedData,
+    },
+    200,
+    true,
+  );
+});

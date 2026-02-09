@@ -19,6 +19,7 @@ const {
   accessMiddleware,
   workerAuthMiddleware,
   clientOrAdminAuthMiddleware,
+  workerOrAdminAuthMiddleware,
 } = require("../middleware/authMiddleware");
 const { uploadDocuments } = require("../middleware/upload.middleware");
 
@@ -111,8 +112,8 @@ projectRouter.get(
 
 projectRouter.get(
   "/project-words/:p_id",
-  workerAuthMiddleware,
-  accessMiddleware("worker"),
+  workerOrAdminAuthMiddleware,
+  accessMiddleware("worker", "admin"),
   getProjectMinmumWords,
 );
 module.exports = projectRouter;

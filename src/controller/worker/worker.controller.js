@@ -2460,6 +2460,132 @@ exports.getWorkerHolidayDetails = catchAsync(async (req, res, next) => {
 //   return { start, end };
 // };
 
+// < ---- old code -->
+
+// exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
+//   const { tenantId, worker_id } = req;
+
+//   /* ---------- VALIDATION ---------- */
+//   if (!tenantId) return next(new AppError("Tenant missing", 400));
+//   if (!isValidCustomUUID(tenantId))
+//     return next(new AppError("Invalid Tenant-id", 400));
+//   if (!worker_id) return next(new AppError("Worker id missing", 400));
+//   if (!mongoose.Types.ObjectId.isValid(worker_id))
+//     return next(new AppError("Invalid worker id", 400));
+
+//   /* ---------- PAGINATION ---------- */
+//   const page = Math.max(Number(req.query.page) || 1, 1);
+//   const limit = Math.min(Number(req.query.limit) || 10, 100);
+//   const skip = (page - 1) * limit;
+
+//   /* ---------- BASE MATCH ---------- */
+//   const matchStage = {
+//     tenantId,
+//     workerId: new mongoose.Types.ObjectId(worker_id),
+//   };
+
+//   /* ---------- DATE FILTER ---------- */
+//   if (req.body?.startDate && req.body?.endDate) {
+//     const start = new Date(req.body.startDate);
+//     const end = new Date(req.body.endDate);
+
+//     start.setHours(0, 0, 0, 0);
+//     end.setHours(23, 59, 59, 999);
+
+//     matchStage["project.project_date"] = { $gte: start, $lte: end };
+//   }
+
+//   /* ---------- AGGREGATION PIPELINE ---------- */
+//   const pipeline = [
+//     { $match: matchStage },
+//     { $sort: { createdAt: -1 } },
+//     {
+//       $lookup: {
+//         from: "projects",
+//         localField: "project.projectId",
+//         foreignField: "_id",
+//         as: "projectData",
+//         pipeline: [
+//           {
+//             $project: {
+//               "project_details.project_name": 1,
+//               daily_work_hour: 1,
+//             },
+//           },
+//         ],
+//       },
+//     },
+//     { $unwind: "$projectData" },
+//     {
+//       $facet: {
+//         metadata: [{ $count: "total" }],
+//         data: [{ $skip: skip }, { $limit: limit }],
+//       },
+//     },
+//   ];
+
+//   /* ---------- EXECUTE IN SINGLE DB ROUND ---------- */
+//   const [result] = await hoursModel.aggregate(pipeline).allowDiskUse(true);
+
+//   const total = result.metadata[0]?.total || 0;
+//   const hours = result.data || [];
+
+//   if (!hours.length) {
+//     return sendSuccess(
+//       res,
+//       "No hours found",
+//       { total: 0, page, limit, totalPages: 0, hours: [] },
+//       200,
+//       true,
+//     );
+//   }
+
+//   /* ---------- HELPER ---------- */
+//   const calculateTotalHours = (shift) => {
+//     if (!shift) return "0h:0m";
+//     const start =
+//       shift.shift_start_time.hours * 60 + shift.shift_start_time.minutes;
+//     const end = shift.shift_end_time.hours * 60 + shift.shift_end_time.minutes;
+//     const diff = end - start;
+//     return `${Math.floor(diff / 60)}h:${diff % 60}m`;
+//   };
+
+//   /* ---------- RESPONSE FORMAT (UNCHANGED) ---------- */
+//   const data = hours.map((val) => ({
+//     date: val.project.project_date,
+//     worker_hours: {
+//       submitted_hours: `${extractDate(val.createdAt)} ${
+//         val.start_working_hours.hours
+//       }h:${val.start_working_hours.minutes}m to ${extractDate(
+//         val.createdAt,
+//       )} ${val.finish_hours.hours}h:${val.finish_hours.minutes}m`,
+//       working_hours: `${val.total_hours}h`,
+//       total_working_hour: calculateTotalHours(val.projectData.daily_work_hour),
+//     },
+//     break: val.break_time || "",
+//     project: {
+//       project_name: val.projectData.project_details.project_name,
+//       comment: val.comments,
+//     },
+//   }));
+
+//   /* ---------- FINAL RESPONSE ---------- */
+//   return sendSuccess(
+//     res,
+//     "Hours fetched successfully",
+//     {
+//       total,
+//       page,
+//       limit,
+//       totalPages: Math.ceil(total / limit),
+//       hours: data,
+//     },
+//     200,
+//     true,
+//   );
+// });
+
+// <--- new code ----->
 exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
   const { tenantId, worker_id } = req;
 
@@ -2483,20 +2609,28 @@ exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
   };
 
   /* ---------- DATE FILTER ---------- */
-  if (req.body?.startDate && req.body?.end) {
+  if (req.body?.startDate && req.body?.endDate) {
     const start = new Date(req.body.startDate);
-    const end = new Date(req.body.end);
+    const end = new Date(req.body.endDate);
 
     start.setHours(0, 0, 0, 0);
     end.setHours(23, 59, 59, 999);
 
-    matchStage.createdAt = { $gte: start, $lte: end };
+    matchStage["project.project_date"] = { $gte: start, $lte: end };
   }
 
   /* ---------- AGGREGATION PIPELINE ---------- */
   const pipeline = [
     { $match: matchStage },
-    { $sort: { createdAt: -1 } },
+
+    // ✅ SORT BY PROJECT DATE (CURRENT DATE NEAREST FIRST)
+    {
+      $sort: {
+        "project.project_date": -1,
+        createdAt: -1, // same date ke andar latest entry upar
+      },
+    },
+
     {
       $lookup: {
         from: "projects",
@@ -2513,7 +2647,9 @@ exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
         ],
       },
     },
+
     { $unwind: "$projectData" },
+
     {
       $facet: {
         metadata: [{ $count: "total" }],
@@ -2522,7 +2658,7 @@ exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
     },
   ];
 
-  /* ---------- EXECUTE IN SINGLE DB ROUND ---------- */
+  /* ---------- EXECUTE ---------- */
   const [result] = await hoursModel.aggregate(pipeline).allowDiskUse(true);
 
   const total = result.metadata[0]?.total || 0;
@@ -2541,10 +2677,14 @@ exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
   /* ---------- HELPER ---------- */
   const calculateTotalHours = (shift) => {
     if (!shift) return "0h:0m";
+
     const start =
       shift.shift_start_time.hours * 60 + shift.shift_start_time.minutes;
+
     const end = shift.shift_end_time.hours * 60 + shift.shift_end_time.minutes;
+
     const diff = end - start;
+
     return `${Math.floor(diff / 60)}h:${diff % 60}m`;
   };
 
