@@ -3226,15 +3226,18 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
   }
 
   /* ---------- BUILD QUERY (project_date based) ---------- */
-  const query = { tenantId };
+  const query = { tenantId, isActive: true };
 
   query["project.project_date"] = {
     $gte: weeks[3].start,
     $lte: weeks[0].end,
   };
 
-  if (req.body?.status) {
-    query.status = req.body.status;
+  if (req.body?.status === Boolean(req.body?.status)) {
+    query.isActive = false;
+  }
+  if (req.body?.status === Boolean(req.body?.status)) {
+    query.isActive = true;
   }
 
   if (Array.isArray(req.body?.workerIds) && req.body.workerIds.length > 0) {
@@ -3332,7 +3335,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
       transformedData.push({
         _id: latest._id,
         tenantId: latest.tenantId,
-        weekNumber: getWeeksSinceCreated(latest.workerId.createdAt),
+        weekNumber: getWeeksSinceCreated(latest.workerId.createdAt, week.start),
         worker: latest.workerId
           ? {
               _id: latest.workerId._id,
@@ -3590,7 +3593,7 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
         finish_hours: obj.finish_hours,
         break_time: obj.break_time,
         day_off: obj.day_off,
-        weekNumber: getWeeksSinceCreated(obj.worker.createdAt),
+        weekNumber: getWeeksSinceCreated(latest.workerId.createdAt, week.start),
         status: obj.status,
         comments: obj.comments,
         image: obj.images,

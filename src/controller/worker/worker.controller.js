@@ -743,8 +743,145 @@ exports.getSingleWorkerController = catchAsync(async (req, res, next) => {
 //   );
 // });
 
+// exports.updateWorkerController = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid Tenant-id", 400));
+//   }
+//   console.log("body", req.body);
+//   const { w_id } = req.query;
+//   if (!w_id) {
+//     return next(new AppError("Worker credential missing", 400));
+//   }
+
+//   // ---------- SAFE JSON PARSE ----------
+//   const safeParse = (v) => {
+//     if (typeof v === "string") {
+//       try {
+//         return JSON.parse(v);
+//       } catch {
+//         return v;
+//       }
+//     }
+//     return v;
+//   };
+
+//   // ---------- PARSE BODY ----------
+//   let data = {
+//     worker_personal_details: safeParse(req.body.worker_personal_details),
+//     worker_position: safeParse(req.body.worker_position),
+//     project: safeParse(req.body.project),
+//     language: safeParse(req.body.language),
+//     worker_economical_data: safeParse(req.body.worker_economical_data),
+//     personal_information: safeParse(req.body.personal_information),
+//     isActive: safeParse(req.body.isActive),
+//   };
+
+//   // ---------- upload_docs -> documents FIX ----------
+//   if (data.personal_information?.upload_docs) {
+//     data.personal_information.documents = data.personal_information.upload_docs;
+//     delete data.personal_information.upload_docs;
+//   }
+
+//   // ---------- FIND WORKER ----------
+//   const worker = await workerModel.findOne({ tenantId, _id: w_id });
+//   if (!worker) {
+//     return next(new AppError("Worker not found", 404));
+//   }
+
+//   // ---------- FILE HANDLING ----------
+//   const documentsUpdate = {};
+//   const otherFilesToPush = [];
+
+//   if (Array.isArray(req.files)) {
+//     req.files.forEach((file) => {
+//       const field = file.fieldname;
+
+//       // ---- SINGLE DOCUMENTS ----
+//       if (
+//         [
+//           "profile_picture",
+//           "drivers_license",
+//           "passport",
+//           "national_id_card",
+//           "worker_work_id",
+//         ].includes(field)
+//       ) {
+//         documentsUpdate[`personal_information.documents.${field}`] = file.path;
+//       }
+
+//       // ---- OTHER FILES ----
+//       const match = field.match(/other_files\.(\d+)\.files/);
+//       if (match) {
+//         const index = Number(match[1]);
+//         const exists =
+//           worker.personal_information?.documents?.other_files?.[index];
+
+//         const folderName =
+//           req.body[`other_files.${index}.folder_name`] ||
+//           exists?.folderName ||
+//           "other_files";
+
+//         if (exists) {
+//           // UPDATE
+//           documentsUpdate[
+//             `personal_information.documents.other_files.${index}.file`
+//           ] = file.path;
+
+//           documentsUpdate[
+//             `personal_information.documents.other_files.${index}.folderName`
+//           ] = folderName;
+//         } else {
+//           // ADD
+//           otherFilesToPush.push({
+//             folderName,
+//             file: file.path,
+//           });
+//         }
+//       }
+//     });
+//   }
+
+//   // ---------- 🚨 PREVENT MONGO PATH CONFLICT ----------
+//   if (Object.keys(documentsUpdate).length > 0 || otherFilesToPush.length > 0) {
+//     delete data.personal_information;
+//   }
+
+//   // ---------- FINAL UPDATE QUERY ----------
+//   const updateQuery = {
+//     $set: {
+//       ...data,
+//       ...documentsUpdate,
+//     },
+//   };
+
+//   if (otherFilesToPush.length > 0) {
+//     updateQuery.$push = {
+//       "personal_information.documents.other_files": {
+//         $each: otherFilesToPush,
+//       },
+//     };
+//   }
+
+//   // ---------- UPDATE DB ----------
+//   const updatedWorker = await workerModel.findOneAndUpdate(
+//     { tenantId, _id: w_id },
+//     updateQuery,
+//     { new: true, runValidators: true },
+//   );
+
+//   return sendSuccess(
+//     res,
+//     "Worker updated successfully",
+//     updatedWorker,
+//     200,
+//     true,
+//   );
+// });
+
 exports.updateWorkerController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
+
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant-id", 400));
   }
@@ -777,10 +914,27 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
     isActive: safeParse(req.body.isActive),
   };
 
-  // ---------- upload_docs -> documents FIX ----------
+  // ---------- upload_docs -> documents ----------
   if (data.personal_information?.upload_docs) {
     data.personal_information.documents = data.personal_information.upload_docs;
     delete data.personal_information.upload_docs;
+  }
+
+  // ---------- FIX other_files STRING ARRAY ISSUE ----------
+  if (
+    data.personal_information?.documents?.other_files &&
+    Array.isArray(data.personal_information.documents.other_files)
+  ) {
+    data.personal_information.documents.other_files =
+      data.personal_information.documents.other_files.map((file) => {
+        if (typeof file === "string") {
+          return {
+            folderName: "other_files",
+            file: file,
+          };
+        }
+        return file;
+      });
   }
 
   // ---------- FIND WORKER ----------
@@ -823,7 +977,7 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
           "other_files";
 
         if (exists) {
-          // UPDATE
+          // UPDATE existing
           documentsUpdate[
             `personal_information.documents.other_files.${index}.file`
           ] = file.path;
@@ -832,7 +986,7 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
             `personal_information.documents.other_files.${index}.folderName`
           ] = folderName;
         } else {
-          // ADD
+          // ADD new
           otherFilesToPush.push({
             folderName,
             file: file.path,
@@ -842,12 +996,14 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
     });
   }
 
-  // ---------- 🚨 PREVENT MONGO PATH CONFLICT ----------
+  // ---------- PREVENT PATH CONFLICT ----------
   if (Object.keys(documentsUpdate).length > 0 || otherFilesToPush.length > 0) {
-    delete data.personal_information;
+    if (data.personal_information?.documents?.other_files) {
+      delete data.personal_information.documents.other_files;
+    }
   }
 
-  // ---------- FINAL UPDATE QUERY ----------
+  // ---------- BUILD UPDATE QUERY ----------
   const updateQuery = {
     $set: {
       ...data,
@@ -863,20 +1019,14 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
     };
   }
 
-  // ---------- UPDATE DB ----------
+  // ---------- UPDATE ----------
   const updatedWorker = await workerModel.findOneAndUpdate(
     { tenantId, _id: w_id },
     updateQuery,
     { new: true, runValidators: true },
   );
 
-  return sendSuccess(
-    res,
-    "Worker updated successfully",
-    updatedWorker,
-    200,
-    true,
-  );
+  return sendSuccess(res, "Worker updated successfully", {}, 200, true);
 });
 
 // <---------- Update worker End ---------------->
@@ -1604,6 +1754,29 @@ exports.makeInActiveWorker = catchAsync(async (req, res, next) => {
     { tenantId: tenantId, _id: w_id },
     {
       $set: { isActive: false },
+    },
+  );
+  if (!isWorkerExist || isWorkerExist.length === 0) {
+    return next(new AppError("worker not found", 400));
+  }
+  return sendSuccess(res, "worker InActive", {}, 201, true);
+});
+exports.makeActiveWorker = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenatn-id", 400));
+  }
+  const { w_id } = req.query;
+  if (!w_id || w_id.length === 0) {
+    return next(new AppError("worker id required", 400));
+  }
+  if (!mongoose.Types.ObjectId.isValid(w_id)) {
+    return next(new AppError("invaild worker id"));
+  }
+  const isWorkerExist = await workerModel.findOneAndUpdate(
+    { tenantId: tenantId, _id: w_id },
+    {
+      $set: { isActive: true },
     },
   );
   if (!isWorkerExist || isWorkerExist.length === 0) {

@@ -23,6 +23,7 @@ const {
   getRequestForWorker,
   getWorkerIdendtity,
   updateWorkerDataToRequest,
+  makeActiveWorker,
 } = require("../controller/worker/worker.controller");
 const {
   authMiddeware,
@@ -80,6 +81,12 @@ workerRouter.patch(
   accessMiddleware("admin"),
   makeInActiveWorker,
 ); // InActive worker
+workerRouter.patch(
+  "/active-worker",
+  authMiddeware,
+  accessMiddleware("admin"),
+  makeActiveWorker,
+);
 workerRouter.delete(
   "/multiple-delete-worker",
   authMiddeware,
