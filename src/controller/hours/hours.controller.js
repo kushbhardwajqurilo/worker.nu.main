@@ -170,6 +170,7 @@ const generateTimesheetPDFBuffer = require("../../utils/generateTimeSheetPdf");
 const clientModel = require("../../models/clientModel");
 const adminModel = require("../../models/authmodel/adminModel");
 const calculateEvaluation = require("../../utils/calculateEvaluation");
+const getWeeksSinceCreated = require("../../utils/calculateWeekNo");
 
 exports.createWorkerHours = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
@@ -2145,6 +2146,49 @@ exports.getDashboardStatsService = async () => {
 };
 
 // approve weekly horus
+// exports.approveHoursByWeekRange = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+//   const { weekRange, worker_id, type } = req.body;
+//   console.log(weekRange);
+//   if (!tenantId) {
+//     return next(new AppError("Tenant Id missing", 400));
+//   }
+
+//   if (!weekRange || !weekRange.startDate || !weekRange.endDate) {
+//     return next(new AppError("Week range missing", 400));
+//   }
+
+//   /* ---------- PARSE WEEK RANGE ---------- */
+//   const weekStart = new Date(weekRange.startDate);
+//   weekStart.setHours(0, 0, 0, 0);
+
+//   const weekEnd = new Date(weekRange.endDate);
+//   weekEnd.setHours(23, 59, 59, 999);
+
+//   /* ---------- UPDATE HOURS ---------- */
+//   const result = await hoursModel.updateMany(
+//     {
+//       tenantId,
+//       workerId: worker_id,
+//       "project.project_date": {
+//         $gte: weekStart,
+//         $lte: weekEnd,
+//       },
+//     },
+//     {
+//       $set: {
+//         status: type,
+//         updatedAt: new Date(),
+//       },
+//     },
+//     { new: true, runValidators: true },
+//   );
+//   if (result.modifiedCount === 0) {
+//     return next(new AppError("Hours Not found In this week range", 400));
+//   }
+//   return sendSuccess(res, `Hours ${type} successfully`, {}, 200, true);
+// });
+
 exports.approveHoursByWeekRange = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
   const { weekRange, worker_id, type } = req.body;
@@ -2157,19 +2201,36 @@ exports.approveHoursByWeekRange = catchAsync(async (req, res, next) => {
     return next(new AppError("Week range missing", 400));
   }
 
-  /* ---------- PARSE WEEK RANGE ---------- */
-  const weekStart = new Date(weekRange.startDate);
-  weekStart.setHours(0, 0, 0, 0);
+  /* ---------- SAFE PARSER (D/M/YYYY or DD/MM/YYYY) ---------- */
+  const parseDate = (dateString) => {
+    const parts = dateString.split("/");
+    if (parts.length !== 3) return null;
 
-  const weekEnd = new Date(weekRange.endDate);
+    const day = Number(parts[0]);
+    const month = Number(parts[1]);
+    const year = Number(parts[2]);
+
+    const parsed = new Date(year, month - 1, day);
+
+    return isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const weekStart = parseDate(weekRange.startDate);
+  const weekEnd = parseDate(weekRange.endDate);
+
+  if (!weekStart || !weekEnd) {
+    return next(new AppError("Invalid week date format", 400));
+  }
+
+  weekStart.setHours(0, 0, 0, 0);
   weekEnd.setHours(23, 59, 59, 999);
 
   /* ---------- UPDATE HOURS ---------- */
   const result = await hoursModel.updateMany(
     {
       tenantId,
-      workerId: worker_id,
-      createdAt: {
+      workerId: new mongoose.Types.ObjectId(worker_id),
+      "project.project_date": {
         $gte: weekStart,
         $lte: weekEnd,
       },
@@ -2180,11 +2241,12 @@ exports.approveHoursByWeekRange = catchAsync(async (req, res, next) => {
         updatedAt: new Date(),
       },
     },
-    { new: true, runValidators: true },
   );
+
   if (result.modifiedCount === 0) {
     return next(new AppError("Hours Not found In this week range", 400));
   }
+
   return sendSuccess(res, `Hours ${type} successfully`, {}, 200, true);
 });
 
@@ -3198,7 +3260,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
       {
         path: "workerId",
         select:
-          "worker_personal_details.firstName worker_personal_details.lastName worker_position personal_information.documents.profile_picture",
+          "worker_personal_details.firstName worker_personal_details.lastName worker_position personal_information.documents.profile_picture createdAt",
         populate: {
           path: "worker_position",
           select: "position",
@@ -3270,7 +3332,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
       transformedData.push({
         _id: latest._id,
         tenantId: latest.tenantId,
-
+        weekNumber: getWeeksSinceCreated(latest.workerId.createdAt),
         worker: latest.workerId
           ? {
               _id: latest.workerId._id,
@@ -3298,6 +3360,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
         createdAt: latest.createdAt,
         updatedAt: latest.updatedAt,
         break_time: latest.break_time,
+        comments: latest.comments,
         weekRange: {
           startDate: week.start.toLocaleDateString("en-IN"),
           endDate: week.end.toLocaleDateString("en-IN"),
@@ -3416,6 +3479,7 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
               $project: {
                 "worker_personal_details.firstName": 1,
                 "worker_personal_details.lastName": 1,
+                createdAt: 1,
                 worker_position: 1,
                 "personal_information.documents.profile_picture": 1,
               },
@@ -3495,8 +3559,7 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
 
       return {
         _id: obj._id,
-        date: obj.createdAt,
-
+        date: obj.worker.createdAt,
         /* ✅ WORKER (FIXED) */
         worker: obj.worker
           ? {
@@ -3527,7 +3590,7 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
         finish_hours: obj.finish_hours,
         break_time: obj.break_time,
         day_off: obj.day_off,
-        weekNumber: obj.weekNumber,
+        weekNumber: getWeeksSinceCreated(obj.worker.createdAt),
         status: obj.status,
         comments: obj.comments,
         image: obj.images,

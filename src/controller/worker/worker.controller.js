@@ -1668,12 +1668,24 @@ exports.getAllProjectsToWorkerAddController = catchAsync(
       return next(new AppError("No projects found", 400));
     }
     const result = [];
-    projects.forEach((val, pos) =>
-      result.push({
-        projectName: val.project_details.project_name,
-        _id: val._id,
-      }),
-    );
+    projects.forEach((val, pos) => {
+      if (req.role === "client") {
+        if (
+          val?.client_details.client &&
+          val?.client_details.client.equals(req?.client_id)
+        ) {
+          result.push({
+            projectName: val.project_details.project_name,
+            _id: val._id,
+          });
+        }
+      } else {
+        result.push({
+          projectName: val.project_details.project_name,
+          _id: val._id,
+        });
+      }
+    });
     return sendSuccess(res, "Projects fetched successfully", result, 200, true);
   },
 );

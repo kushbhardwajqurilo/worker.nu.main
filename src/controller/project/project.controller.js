@@ -649,8 +649,6 @@ exports.getAllProjectsController = catchAsync(async (req, res, next) => {
   if (req.body?.status === "active") {
     query.is_complete = false;
   }
-
-  console.log("ueyr", query);
   const totalCount = await projectMode.countDocuments(query);
 
   if (totalCount === 0) {
@@ -1380,7 +1378,7 @@ exports.addWorkerInProject = catchAsync(async (req, res, next) => {
 exports.workerList = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
   const { p_id } = req.query;
-
+  console.log(p_id);
   if (!tenantId) {
     return next(new AppError("tenant-id missing in headers", 400));
   }
@@ -1428,7 +1426,51 @@ exports.workerList = catchAsync(async (req, res, next) => {
       true,
     );
   }
-
+  if (req.role === "client") {
+    const clientWorkersList = await projectMode.aggregate([
+      {
+        $match: {
+          tenantId,
+          "client_details.client": new mongoose.Types.ObjectId(req.client_id),
+        },
+      },
+      {
+        $unwind: "$project_workers.workers",
+      },
+      {
+        $group: {
+          _id: "$project_workers.workers", // unique worker ids
+        },
+      },
+      {
+        $lookup: {
+          from: "workers",
+          localField: "_id",
+          foreignField: "_id",
+          as: "workerDetails",
+          pipeline: [
+            {
+              $project: {
+                "worker_personal_details.firstName": 1,
+                "worker_personal_details.lastName": 1,
+              },
+            },
+          ],
+        },
+      },
+      {
+        $unwind: "$workerDetails",
+      },
+      {
+        $project: {
+          _id: 1,
+          firstName: "$workerDetails.worker_personal_details.firstName",
+          lastName: "$workerDetails.worker_personal_details.lastName",
+        },
+      },
+    ]);
+    return sendSuccess(res, "success", clientWorkersList, 200, true);
+  }
   /* ================= ALL WORKERS ================= */
   const workers = await workerModel.find({
     tenantId,

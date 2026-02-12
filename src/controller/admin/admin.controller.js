@@ -48,13 +48,17 @@ exports.getHolidayRequest = catchAsync(async (req, res, next) => {
     query.workerId = { $in: workerObjectIds };
   }
   if (req.body?.date) {
-    const filterDate = new Date(req.body.date);
+    const inputDate = new Date(req.body.date);
 
-    // optional but recommended
-    filterDate.setHours(0, 0, 0, 0);
+    const year = inputDate.getFullYear();
+    const month = inputDate.getMonth();
+    const day = inputDate.getDate();
 
-    query["duration.startDate"] = { $lte: filterDate };
-    query["duration.endDate"] = { $gte: filterDate };
+    const startOfDay = new Date(year, month, day, 0, 0, 0, 0);
+    const endOfDay = new Date(year, month, day, 23, 59, 59, 999);
+
+    query["duration.startDate"] = { $lte: endOfDay };
+    query["duration.endDate"] = { $gte: startOfDay };
   }
   // ================= TOTAL COUNT =================
   const totalRecords = await holidayModel.countDocuments(query);
@@ -139,7 +143,6 @@ exports.getHolidayRequest = catchAsync(async (req, res, next) => {
 // get sick leave request
 exports.getSicknessRequest = catchAsync(async (req, res, next) => {
   const { admin_id, tenantId } = req;
-  console.log(req.body);
   if (!tenantId) {
     return next(new AppError("tenant-id missing", 400));
   }
@@ -173,14 +176,19 @@ exports.getSicknessRequest = catchAsync(async (req, res, next) => {
     query.workerId = { $in: workerObjectIds };
   }
   if (req.body?.date) {
-    const filterDate = new Date(req.body.date);
+    const inputDate = new Date(req.body.date);
 
-    // optional but recommended
-    filterDate.setHours(0, 0, 0, 0);
+    const year = inputDate.getFullYear();
+    const month = inputDate.getMonth();
+    const day = inputDate.getDate();
 
-    query["duration.startDate"] = { $lte: filterDate };
-    query["duration.endDate"] = { $gte: filterDate };
+    const startOfDay = new Date(year, month, day, 0, 0, 0, 0);
+    const endOfDay = new Date(year, month, day, 23, 59, 59, 999);
+
+    query["duration.startDate"] = { $lte: endOfDay };
+    query["duration.endDate"] = { $gte: startOfDay };
   }
+
   // ================= TOTAL COUNT =================
   const totalRecords = await sicknessModel.countDocuments(query);
 

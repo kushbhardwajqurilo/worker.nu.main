@@ -99,7 +99,7 @@ clientRouter.post(
   accessMiddleware("client"),
   getAllHoursOfWorkerToClientController,
 );
-clientRouter.get(
+clientRouter.post(
   "/client-single-workers-hours",
   clientAuthMiddleware,
   accessMiddleware("client"),

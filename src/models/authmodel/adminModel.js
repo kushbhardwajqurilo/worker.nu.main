@@ -52,4 +52,5 @@ const adminSchema = new mongoose.Schema({
   },
 });
 // const generateTenantId =
+adminSchema.index({ email: 1, tenantId: 1 });
 module.exports = mongoose.model("auth", adminSchema);
