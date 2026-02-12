@@ -3226,18 +3226,15 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
   }
 
   /* ---------- BUILD QUERY (project_date based) ---------- */
-  const query = { tenantId, isActive: true };
+  const query = { tenantId };
 
   query["project.project_date"] = {
     $gte: weeks[3].start,
     $lte: weeks[0].end,
   };
 
-  if (req.body?.status === Boolean(req.body?.status)) {
-    query.isActive = false;
-  }
-  if (req.body?.status === Boolean(req.body?.status)) {
-    query.isActive = true;
+  if (req.body?.status) {
+    query.status = req.body.status;
   }
 
   if (Array.isArray(req.body?.workerIds) && req.body.workerIds.length > 0) {
