@@ -1,5 +1,5 @@
-function getWeeksSinceCreated(joiningDate, referenceDate) {
-  if (!joiningDate || !referenceDate) return 1; // minimum 1
+function getWeeksCreated(joiningDate, referenceDate) {
+  if (!joiningDate || !referenceDate) return 1;
 
   const start = new Date(joiningDate);
   const ref = new Date(referenceDate);
@@ -7,12 +7,9 @@ function getWeeksSinceCreated(joiningDate, referenceDate) {
   start.setHours(0, 0, 0, 0);
   ref.setHours(0, 0, 0, 0);
 
-  // Agar reference date joining se pehle hai → Week 1 return karo
-  if (ref < start) return 1;
-
   const getMonday = (date) => {
     const d = new Date(date);
-    const day = d.getDay() === 0 ? 7 : d.getDay(); // Sunday fix
+    const day = d.getDay() === 0 ? 7 : d.getDay();
     d.setDate(d.getDate() - day + 1);
     d.setHours(0, 0, 0, 0);
     return d;
@@ -24,8 +21,9 @@ function getWeeksSinceCreated(joiningDate, referenceDate) {
   const diffInMs = refMonday - startMonday;
   const diffInWeeks = Math.floor(diffInMs / (1000 * 60 * 60 * 24 * 7));
 
-  // Minimum week 1 guarantee
-  return Math.max(1, diffInWeeks + 1);
-}
+  // ✅ Prevent negative week
+  if (diffInWeeks < 0) return 1;
 
-module.exports = getWeeksSinceCreated;
+  return diffInWeeks + 1;
+}
+module.exports = getWeeksCreated;
