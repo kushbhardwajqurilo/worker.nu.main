@@ -743,149 +743,12 @@ exports.getSingleWorkerController = catchAsync(async (req, res, next) => {
 //   );
 // });
 
-// exports.updateWorkerController = catchAsync(async (req, res, next) => {
-//   const { tenantId } = req;
-//   if (!isValidCustomUUID(tenantId)) {
-//     return next(new AppError("Invalid Tenant-id", 400));
-//   }
-//   console.log("body", req.body);
-//   const { w_id } = req.query;
-//   if (!w_id) {
-//     return next(new AppError("Worker credential missing", 400));
-//   }
-
-//   // ---------- SAFE JSON PARSE ----------
-//   const safeParse = (v) => {
-//     if (typeof v === "string") {
-//       try {
-//         return JSON.parse(v);
-//       } catch {
-//         return v;
-//       }
-//     }
-//     return v;
-//   };
-
-//   // ---------- PARSE BODY ----------
-//   let data = {
-//     worker_personal_details: safeParse(req.body.worker_personal_details),
-//     worker_position: safeParse(req.body.worker_position),
-//     project: safeParse(req.body.project),
-//     language: safeParse(req.body.language),
-//     worker_economical_data: safeParse(req.body.worker_economical_data),
-//     personal_information: safeParse(req.body.personal_information),
-//     isActive: safeParse(req.body.isActive),
-//   };
-
-//   // ---------- upload_docs -> documents FIX ----------
-//   if (data.personal_information?.upload_docs) {
-//     data.personal_information.documents = data.personal_information.upload_docs;
-//     delete data.personal_information.upload_docs;
-//   }
-
-//   // ---------- FIND WORKER ----------
-//   const worker = await workerModel.findOne({ tenantId, _id: w_id });
-//   if (!worker) {
-//     return next(new AppError("Worker not found", 404));
-//   }
-
-//   // ---------- FILE HANDLING ----------
-//   const documentsUpdate = {};
-//   const otherFilesToPush = [];
-
-//   if (Array.isArray(req.files)) {
-//     req.files.forEach((file) => {
-//       const field = file.fieldname;
-
-//       // ---- SINGLE DOCUMENTS ----
-//       if (
-//         [
-//           "profile_picture",
-//           "drivers_license",
-//           "passport",
-//           "national_id_card",
-//           "worker_work_id",
-//         ].includes(field)
-//       ) {
-//         documentsUpdate[`personal_information.documents.${field}`] = file.path;
-//       }
-
-//       // ---- OTHER FILES ----
-//       const match = field.match(/other_files\.(\d+)\.files/);
-//       if (match) {
-//         const index = Number(match[1]);
-//         const exists =
-//           worker.personal_information?.documents?.other_files?.[index];
-
-//         const folderName =
-//           req.body[`other_files.${index}.folder_name`] ||
-//           exists?.folderName ||
-//           "other_files";
-
-//         if (exists) {
-//           // UPDATE
-//           documentsUpdate[
-//             `personal_information.documents.other_files.${index}.file`
-//           ] = file.path;
-
-//           documentsUpdate[
-//             `personal_information.documents.other_files.${index}.folderName`
-//           ] = folderName;
-//         } else {
-//           // ADD
-//           otherFilesToPush.push({
-//             folderName,
-//             file: file.path,
-//           });
-//         }
-//       }
-//     });
-//   }
-
-//   // ---------- 🚨 PREVENT MONGO PATH CONFLICT ----------
-//   if (Object.keys(documentsUpdate).length > 0 || otherFilesToPush.length > 0) {
-//     delete data.personal_information;
-//   }
-
-//   // ---------- FINAL UPDATE QUERY ----------
-//   const updateQuery = {
-//     $set: {
-//       ...data,
-//       ...documentsUpdate,
-//     },
-//   };
-
-//   if (otherFilesToPush.length > 0) {
-//     updateQuery.$push = {
-//       "personal_information.documents.other_files": {
-//         $each: otherFilesToPush,
-//       },
-//     };
-//   }
-
-//   // ---------- UPDATE DB ----------
-//   const updatedWorker = await workerModel.findOneAndUpdate(
-//     { tenantId, _id: w_id },
-//     updateQuery,
-//     { new: true, runValidators: true },
-//   );
-
-//   return sendSuccess(
-//     res,
-//     "Worker updated successfully",
-//     updatedWorker,
-//     200,
-//     true,
-//   );
-// });
-
 exports.updateWorkerController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
-
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant-id", 400));
   }
-
+  console.log("body", req.body);
   const { w_id } = req.query;
   if (!w_id) {
     return next(new AppError("Worker credential missing", 400));
@@ -914,27 +777,10 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
     isActive: safeParse(req.body.isActive),
   };
 
-  // ---------- upload_docs -> documents ----------
+  // ---------- upload_docs -> documents FIX ----------
   if (data.personal_information?.upload_docs) {
     data.personal_information.documents = data.personal_information.upload_docs;
     delete data.personal_information.upload_docs;
-  }
-
-  // ---------- FIX other_files STRING ARRAY ISSUE ----------
-  if (
-    data.personal_information?.documents?.other_files &&
-    Array.isArray(data.personal_information.documents.other_files)
-  ) {
-    data.personal_information.documents.other_files =
-      data.personal_information.documents.other_files.map((file) => {
-        if (typeof file === "string") {
-          return {
-            folderName: "other_files",
-            file: file,
-          };
-        }
-        return file;
-      });
   }
 
   // ---------- FIND WORKER ----------
@@ -977,7 +823,7 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
           "other_files";
 
         if (exists) {
-          // UPDATE existing
+          // UPDATE
           documentsUpdate[
             `personal_information.documents.other_files.${index}.file`
           ] = file.path;
@@ -986,7 +832,7 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
             `personal_information.documents.other_files.${index}.folderName`
           ] = folderName;
         } else {
-          // ADD new
+          // ADD
           otherFilesToPush.push({
             folderName,
             file: file.path,
@@ -996,14 +842,12 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
     });
   }
 
-  // ---------- PREVENT PATH CONFLICT ----------
+  // ---------- 🚨 PREVENT MONGO PATH CONFLICT ----------
   if (Object.keys(documentsUpdate).length > 0 || otherFilesToPush.length > 0) {
-    if (data.personal_information?.documents?.other_files) {
-      delete data.personal_information.documents.other_files;
-    }
+    delete data.personal_information;
   }
 
-  // ---------- BUILD UPDATE QUERY ----------
+  // ---------- FINAL UPDATE QUERY ----------
   const updateQuery = {
     $set: {
       ...data,
@@ -1019,15 +863,171 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
     };
   }
 
-  // ---------- UPDATE ----------
+  // ---------- UPDATE DB ----------
   const updatedWorker = await workerModel.findOneAndUpdate(
     { tenantId, _id: w_id },
     updateQuery,
     { new: true, runValidators: true },
   );
 
-  return sendSuccess(res, "Worker updated successfully", {}, 200, true);
+  return sendSuccess(
+    res,
+    "Worker updated successfully",
+    updatedWorker,
+    200,
+    true,
+  );
 });
+
+// exports.updateWorkerController = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid Tenant-id", 400));
+//   }
+
+//   const { w_id } = req.query;
+//   if (!w_id) {
+//     return next(new AppError("Worker credential missing", 400));
+//   }
+
+//   // ---------- SAFE JSON PARSE ----------
+//   const safeParse = (v) => {
+//     if (typeof v === "string") {
+//       try {
+//         return JSON.parse(v);
+//       } catch {
+//         return v;
+//       }
+//     }
+//     return v;
+//   };
+
+//   // ---------- PARSE BODY ----------
+//   let data = {
+//     worker_personal_details: safeParse(req.body.worker_personal_details),
+//     worker_position: safeParse(req.body.worker_position),
+//     project: safeParse(req.body.project),
+//     language: safeParse(req.body.language),
+//     worker_economical_data: safeParse(req.body.worker_economical_data),
+//     personal_information: safeParse(req.body.personal_information),
+//     isActive: safeParse(req.body.isActive),
+//   };
+
+//   // ---------- upload_docs -> documents ----------
+//   if (data.personal_information?.upload_docs) {
+//     data.personal_information.documents = data.personal_information.upload_docs;
+//     delete data.personal_information.upload_docs;
+//   }
+
+//   // ---------- FIX other_files STRING ARRAY ISSUE ----------
+//   if (
+//     data.personal_information?.documents?.other_files &&
+//     Array.isArray(data.personal_information.documents.other_files)
+//   ) {
+//     data.personal_information.documents.other_files =
+//       data.personal_information.documents.other_files.map((file) => {
+//         if (typeof file === "string") {
+//           return {
+//             folderName: "other_files",
+//             file: file,
+//           };
+//         }
+//         return file;
+//       });
+//   }
+
+//   // ---------- FIND WORKER ----------
+//   const worker = await workerModel.findOne({ tenantId, _id: w_id });
+//   if (!worker) {
+//     return next(new AppError("Worker not found", 404));
+//   }
+
+//   // ---------- FILE HANDLING ----------
+//   const documentsUpdate = {};
+//   const otherFilesToPush = [];
+
+//   if (Array.isArray(req.files)) {
+//     req.files.forEach((file) => {
+//       const field = file.fieldname;
+
+//       // ---- SINGLE DOCUMENTS ----
+//       if (
+//         [
+//           "profile_picture",
+//           "drivers_license",
+//           "passport",
+//           "national_id_card",
+//           "worker_work_id",
+//         ].includes(field)
+//       ) {
+//         documentsUpdate[`personal_information.documents.${field}`] = file.path;
+//       }
+
+//       // ---- OTHER FILES ----
+//       const match = field.match(/other_files\.(\d+)\.files/);
+//       if (match) {
+//         const index = Number(match[1]);
+//         const exists =
+//           worker.personal_information?.documents?.other_files?.[index];
+
+//         const folderName =
+//           req.body[`other_files.${index}.folder_name`] ||
+//           exists?.folderName ||
+//           "other_files";
+
+//         if (exists) {
+//           // UPDATE existing
+//           documentsUpdate[
+//             `personal_information.documents.other_files.${index}.file`
+//           ] = file.path;
+
+//           documentsUpdate[
+//             `personal_information.documents.other_files.${index}.folderName`
+//           ] = folderName;
+//         } else {
+//           // ADD new
+//           otherFilesToPush.push({
+//             folderName,
+//             file: file.path,
+//           });
+//         }
+//       }
+//     });
+//   }
+
+//   // ---------- PREVENT PATH CONFLICT ----------
+//   if (Object.keys(documentsUpdate).length > 0 || otherFilesToPush.length > 0) {
+//     if (data.personal_information?.documents?.other_files) {
+//       delete data.personal_information.documents.other_files;
+//     }
+//   }
+
+//   // ---------- BUILD UPDATE QUERY ----------
+//   const updateQuery = {
+//     $set: {
+//       ...data,
+//       ...documentsUpdate,
+//     },
+//   };
+
+//   if (otherFilesToPush.length > 0) {
+//     updateQuery.$push = {
+//       "personal_information.documents.other_files": {
+//         $each: otherFilesToPush,
+//       },
+//     };
+//   }
+
+//   // ---------- UPDATE ----------
+//   const updatedWorker = await workerModel.findOneAndUpdate(
+//     { tenantId, _id: w_id },
+//     updateQuery,
+//     { new: true, runValidators: true },
+//   );
+
+//   return sendSuccess(res, "Worker updated successfully", {}, 200, true);
+// });
 
 // <---------- Update worker End ---------------->
 
@@ -2771,6 +2771,143 @@ exports.getWorkerHolidayDetails = catchAsync(async (req, res, next) => {
 // });
 
 // <--- new code ----->
+// exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
+//   const { tenantId, worker_id } = req;
+
+//   /* ---------- VALIDATION ---------- */
+//   if (!tenantId) return next(new AppError("Tenant missing", 400));
+//   if (!isValidCustomUUID(tenantId))
+//     return next(new AppError("Invalid Tenant-id", 400));
+//   if (!worker_id) return next(new AppError("Worker id missing", 400));
+//   if (!mongoose.Types.ObjectId.isValid(worker_id))
+//     return next(new AppError("Invalid worker id", 400));
+
+//   /* ---------- PAGINATION ---------- */
+//   const page = Math.max(Number(req.query.page) || 1, 1);
+//   const limit = Math.min(Number(req.query.limit) || 10, 100);
+//   const skip = (page - 1) * limit;
+
+//   /* ---------- BASE MATCH ---------- */
+//   const matchStage = {
+//     tenantId,
+//     workerId: new mongoose.Types.ObjectId(worker_id),
+//   };
+
+//   /* ---------- DATE FILTER ---------- */
+//   if (req.body?.startDate && req.body?.endDate) {
+//     const start = new Date(req.body.startDate);
+//     const end = new Date(req.body.endDate);
+
+//     start.setHours(0, 0, 0, 0);
+//     end.setHours(23, 59, 59, 999);
+
+//     matchStage["project.project_date"] = { $gte: start, $lte: end };
+//   }
+
+//   /* ---------- AGGREGATION PIPELINE ---------- */
+//   const pipeline = [
+//     { $match: matchStage },
+
+//     // ✅ SORT BY PROJECT DATE (CURRENT DATE NEAREST FIRST)
+//     {
+//       $sort: {
+//         "project.project_date": -1,
+//         createdAt: -1, // same date ke andar latest entry upar
+//       },
+//     },
+
+//     {
+//       $lookup: {
+//         from: "projects",
+//         localField: "project.projectId",
+//         foreignField: "_id",
+//         as: "projectData",
+//         pipeline: [
+//           {
+//             $project: {
+//               "project_details.project_name": 1,
+//               daily_work_hour: 1,
+//             },
+//           },
+//         ],
+//       },
+//     },
+
+//     { $unwind: "$projectData" },
+
+//     {
+//       $facet: {
+//         metadata: [{ $count: "total" }],
+//         data: [{ $skip: skip }, { $limit: limit }],
+//       },
+//     },
+//   ];
+
+//   /* ---------- EXECUTE ---------- */
+//   const [result] = await hoursModel.aggregate(pipeline).allowDiskUse(true);
+
+//   const total = result.metadata[0]?.total || 0;
+//   const hours = result.data || [];
+
+//   if (!hours.length) {
+//     return sendSuccess(
+//       res,
+//       "No hours found",
+//       { total: 0, page, limit, totalPages: 0, hours: [] },
+//       200,
+//       true,
+//     );
+//   }
+
+//   /* ---------- HELPER ---------- */
+//   const calculateTotalHours = (shift) => {
+//     if (!shift) return "0h:0m";
+
+//     const start =
+//       shift.shift_start_time.hours * 60 + shift.shift_start_time.minutes;
+
+//     const end = shift.shift_end_time.hours * 60 + shift.shift_end_time.minutes;
+
+//     const diff = end - start;
+
+//     return `${Math.floor(diff / 60)}h:${diff % 60}m`;
+//   };
+
+//   /* ---------- RESPONSE FORMAT (UNCHANGED) ---------- */
+//   const data = hours.map((val) => ({
+//     date: val.project.project_date,
+//     worker_hours: {
+//       submitted_hours: `${extractDate(val.createdAt)} ${
+//         val.start_working_hours.hours
+//       }h:${val.start_working_hours.minutes}m to ${extractDate(
+//         val.createdAt,
+//       )} ${val.finish_hours.hours}h:${val.finish_hours.minutes}m`,
+//       working_hours: `${val.total_hours}h`,
+//       total_working_hour: calculateTotalHours(val.projectData.daily_work_hour),
+//     },
+//     break: val.break_time || "",
+//     project: {
+//       project_name: val.projectData.project_details.project_name,
+//       comment: val.comments,
+//     },
+//   }));
+
+//   /* ---------- FINAL RESPONSE ---------- */
+//   return sendSuccess(
+//     res,
+//     "Hours fetched successfully",
+//     {
+//       total,
+//       page,
+//       limit,
+//       totalPages: Math.ceil(total / limit),
+//       hours: data,
+//     },
+//     200,
+//     true,
+//   );
+// });
+
 exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
   const { tenantId, worker_id } = req;
 
@@ -2877,10 +3014,10 @@ exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
   const data = hours.map((val) => ({
     date: val.project.project_date,
     worker_hours: {
-      submitted_hours: `${extractDate(val.createdAt)} ${
+      submitted_hours: `${extractDate(val.project.project_date)} ${
         val.start_working_hours.hours
       }h:${val.start_working_hours.minutes}m to ${extractDate(
-        val.createdAt,
+        val.project.project_date,
       )} ${val.finish_hours.hours}h:${val.finish_hours.minutes}m`,
       working_hours: `${val.total_hours}h`,
       total_working_hour: calculateTotalHours(val.projectData.daily_work_hour),
@@ -2907,7 +3044,6 @@ exports.getAllHoursForWorkers = catchAsync(async (req, res, next) => {
     true,
   );
 });
-
 exports.LastAndThisWeekTotalHours = catchAsync(async (req, res, next) => {
   const { tenantId, worker_id } = req;
 

@@ -215,6 +215,7 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
   const parsedProject = safeParse(project);
   const parsedStartHours = safeParse(start_working_hours);
   const parsedFinishHours = safeParse(finish_hours);
+  const parseComments = safeParse(comments);
   const parsedWorkerId =
     req.role === "worker" ? req.worker_id : safeParse(workerId);
   const breakTime =
@@ -256,7 +257,7 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
     finish_hours: parsedFinishHours,
     day_off,
     break_time: break_time === "undefined" || "" ? 0 : Number(breakTime),
-    comments,
+    comments: parseComments,
     workerId: parsedWorkerId ? parsedWorkerId : workerId,
     lateReason,
     createdBy: req.role,
@@ -3807,7 +3808,7 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
 
       return {
         _id: obj._id,
-        date: obj.worker.createdAt,
+        date: obj.createdAt,
         /* ✅ WORKER (FIXED) */
         worker: obj.worker
           ? {

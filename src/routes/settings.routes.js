@@ -12,6 +12,7 @@ const {
 const {
   authMiddeware,
   accessMiddleware,
+  workerOrAdminAuthMiddleware,
 } = require("../middleware/authMiddleware");
 const settingsRouter = require("express").Router();
 
@@ -67,8 +68,8 @@ settingsRouter.post(
 );
 settingsRouter.get(
   "/get-hour-setting",
-  authMiddeware,
-  accessMiddleware("admin"),
+  workerOrAdminAuthMiddleware,
+  accessMiddleware("admin", "worker"),
   getHoursSettingsControlle,
 );
 module.exports = settingsRouter;
