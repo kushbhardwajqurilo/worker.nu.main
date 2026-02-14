@@ -399,7 +399,7 @@ exports.adminLogoutController = catchAsync(async (req, res, next) => {
   return sendSuccess(res, "Logout Successfully", {}, 200, true);
 });
 
-exports.adminForgetPasswordManual = catchAsync(async (req, res, nexg) => {
+exports.adminForgetPasswordManual = catchAsync(async (req, res, next) => {
   let { email } = req.body;
 
   if (!email) {
@@ -407,6 +407,9 @@ exports.adminForgetPasswordManual = catchAsync(async (req, res, nexg) => {
   }
   email = email.trim();
   const isEmail = await adminModel.findOne({ email });
+  if (!isEmail) {
+    return next(new AppError("Invalid Email", 400));
+  }
   const resetToken = jwt.sign({ id: isEmail._id }, process.env.RESET_PASS_KEY, {
     expiresIn: "5m",
   });

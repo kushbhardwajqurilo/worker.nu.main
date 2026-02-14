@@ -161,7 +161,13 @@ exports.addProjectController = catchAsync(async (req, res, next) => {
     req.body.project_details,
     "project_details",
   );
+  if (project_details.project_start_date) {
+    const [month, day, year] = project_details.project_start_date.split("/");
 
+    project_details.project_start_date = new Date(
+      Date.UTC(year, month - 1, day),
+    );
+  }
   const daily_work_hour_raw = parseJSON(
     req.body.daily_work_hour,
     "daily_work_hour",
