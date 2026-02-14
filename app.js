@@ -27,12 +27,11 @@ app.use(express.urlencoded({ extended: true }));
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
-  "https://yourdomain.com",
-  "https://admin.yourdomain.com",
   "https://ql3cm80q-3000.inc1.devtunnels.ms",
   "http://localhost:8002",
   "https://4frnn03l-8002.inc1.devtunnels.ms",
   "https://worker-mawz.vercel.app",
+  "https://api.project1222.com",
 ];
 
 app.use(
