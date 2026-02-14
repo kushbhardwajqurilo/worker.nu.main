@@ -1163,7 +1163,14 @@ exports.updateProjectController = catchAsync(async (req, res, next) => {
       "project_details",
     );
   }
-
+  if (setUpdate.project_details.project_start_date) {
+    const [month, day, year] =
+      setUpdate.project_details.project_start_date.split("/");
+    setUpdate.project_details.project_start_date = new Date(
+      Date.UTC(year, month - 1, day),
+    );
+  }
+  console.log(setUpdate);
   if (req.body.daily_work_hour) {
     const dwh = parseJSON(req.body.daily_work_hour, "daily_work_hour");
     setUpdate.daily_work_hour = {
