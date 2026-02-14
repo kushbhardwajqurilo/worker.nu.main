@@ -36,13 +36,18 @@ exports.addCompanyController = catchAsync(async (req, res, next) => {
   }
 
   const payload = {
-    ...req.body,
+    phone: req.body.phone,
+    timezone: req.body.timezone,
+    company_registration_no: req.body.company_registration_no,
+    company_address: req.body.company_address,
+    language: req.body.language,
+    email: req.body.notification_email,
+    company_name: req.body.company_name,
     logo: req.files[0].path,
   };
-
   const insert = await adminModel.updateOne(
     { tenantId },
-    { $set: { payload } },
+    { $set: payload },
     { $new: true },
   );
 
@@ -65,7 +70,7 @@ exports.getCompanyDetailController = catchAsync(async (req, res, next) => {
   const find = await adminModel
     .findOne({ tenantId })
     .select(
-      "logo company_name phone timezone company_registration_no company_address ",
+      "logo company_name phone timezone company_registration_no company_address email",
     );
   if (!find || find.length === 0) {
     return next(new AppError("failed to fatch", 400));
