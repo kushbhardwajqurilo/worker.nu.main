@@ -2109,6 +2109,157 @@ exports.getAllProjectsToWorkerAddController = catchAsync(
 //   );
 // });
 
+// exports.requestLeave = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+//   const { leaveType, reason, range, workerIds: bodyWorkerIds } = req.body;
+
+//   if (!tenantId) {
+//     return next(new AppError("tenant-id missing", 400));
+//   }
+
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid tenant-id", 400));
+//   }
+
+//   /* ---------- WORKER ID NORMALIZATION ---------- */
+//   let workerIds = [];
+
+//   if (Array.isArray(bodyWorkerIds) && bodyWorkerIds.length > 0) {
+//     workerIds = bodyWorkerIds;
+//   } else if (req.worker_id) {
+//     workerIds = [req.worker_id];
+//   }
+
+//   if (!workerIds.length) {
+//     return next(new AppError("worker_id missing", 400));
+//   }
+
+//   workerIds = workerIds.map((wid) => {
+//     if (!mongoose.Types.ObjectId.isValid(wid)) {
+//       return next(new AppError(`Invalid worker_id: ${wid}`, 400));
+//     }
+//     return new mongoose.Types.ObjectId(wid);
+//   });
+
+//   /* ---------- BODY VALIDATION ---------- */
+//   if (!leaveType || !["holiday", "sickness"].includes(leaveType)) {
+//     return next(new AppError("Invalid leaveType (holiday | sickness)", 400));
+//   }
+
+//   if (!reason) {
+//     return next(new AppError("reason is required", 400));
+//   }
+
+//   /* ---------- DATE RANGE HANDLING (optional) ---------- */
+//   let startDate;
+//   let endDate;
+//   let totalDays = 1;
+
+//   if (range && range.startDate && range.endDate) {
+//     // Parse the date string the client sent (any timezone)
+//     const startInput = new Date(range.startDate);
+//     const endInput = new Date(range.endDate);
+
+//     if (isNaN(startInput.getTime()) || isNaN(endInput.getTime())) {
+//       return next(new AppError("Invalid startDate or endDate format", 400));
+//     }
+
+//     if (startInput > endInput) {
+//       return next(new AppError("startDate cannot be later than endDate", 400));
+//     }
+
+//     // ────────────────────────────────────────────────
+//     // MOST IMPORTANT PART: use local date parts (not UTC)
+//     // This preserves "what the user saw / intended"
+//     // ────────────────────────────────────────────────
+//     startDate = new Date(
+//       Date.UTC(
+//         startInput.getFullYear(),
+//         startInput.getMonth(),
+//         startInput.getDate(),
+//       ),
+//     );
+
+//     endDate = new Date(
+//       Date.UTC(endInput.getFullYear(), endInput.getMonth(), endInput.getDate()),
+//     );
+
+//     // Calculate number of calendar days (inclusive)
+//     const diffMs = endDate - startDate;
+//     totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
+//   } else {
+//     // No range → today (single day)
+//     const today = new Date();
+//     startDate = new Date(
+//       Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()),
+//     );
+//     endDate = startDate;
+//     totalDays = 1;
+//   }
+
+//   /* ---------- WORKER EXISTENCE CHECK ---------- */
+//   const workers = await workerModel
+//     .find({
+//       tenantId,
+//       _id: { $in: workerIds },
+//       isDelete: false,
+//       isActive: true,
+//     })
+//     .lean();
+
+//   if (workers.length !== workerIds.length) {
+//     return next(new AppError("One or more workers not found or inactive", 400));
+//   }
+
+//   /* ---------- MODEL SELECTION ---------- */
+//   const LeaveModel = leaveType === "holiday" ? holidayModel : sicknessModel;
+
+//   /* ---------- PAYLOAD ---------- */
+//   const payload = workerIds.map((wid) => ({
+//     tenantId,
+//     workerId: wid,
+//     duration: {
+//       startDate, // now correctly 2026-02-12 00:00:00Z if client sent Feb 12
+//       endDate,
+//       totalDays,
+//     },
+//     ...(leaveType === "holiday" ? { reason } : { description: reason }),
+//   }));
+
+//   /* ---------- SAVE ---------- */
+//   let leaveRequest;
+//   if (payload.length === 1) {
+//     leaveRequest = await LeaveModel.create(payload[0]);
+//   } else {
+//     leaveRequest = await LeaveModel.create(payload);
+//   }
+
+//   /* ---------- RESPONSE ---------- */
+//   return sendSuccess(
+//     res,
+//     "Leave request submitted successfully",
+//     leaveRequest,
+//     201,
+//     true,
+//   );
+// });
+
+// <------new code for date 14/2/26 --------
+// helper function
+function createUTCDate(dateString) {
+  if (!dateString) return null;
+
+  const parts = dateString.split("/");
+
+  if (parts.length !== 3) return null;
+
+  const day = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  const year = parseInt(parts[2], 10);
+
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
 exports.requestLeave = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
   const { leaveType, reason, range, workerIds: bodyWorkerIds } = req.body;
@@ -2122,6 +2273,7 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
   }
 
   /* ---------- WORKER ID NORMALIZATION ---------- */
+
   let workerIds = [];
 
   if (Array.isArray(bodyWorkerIds) && bodyWorkerIds.length > 0) {
@@ -2142,6 +2294,7 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
   });
 
   /* ---------- BODY VALIDATION ---------- */
+
   if (!leaveType || !["holiday", "sickness"].includes(leaveType)) {
     return next(new AppError("Invalid leaveType (holiday | sickness)", 400));
   }
@@ -2150,17 +2303,17 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
     return next(new AppError("reason is required", 400));
   }
 
-  /* ---------- DATE RANGE HANDLING (optional) ---------- */
+  /* ---------- DATE RANGE HANDLING ---------- */
+
   let startDate;
   let endDate;
   let totalDays = 1;
 
   if (range && range.startDate && range.endDate) {
-    // Parse the date string the client sent (any timezone)
-    const startInput = new Date(range.startDate);
-    const endInput = new Date(range.endDate);
-
-    if (isNaN(startInput.getTime()) || isNaN(endInput.getTime())) {
+    // ✅ FIXED: using Date.UTC function
+    const startInput = createUTCDate(range.startDate);
+    const endInput = createUTCDate(range.endDate);
+    if (!startInput || !endInput) {
       return next(new AppError("Invalid startDate or endDate format", 400));
     }
 
@@ -2168,36 +2321,28 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
       return next(new AppError("startDate cannot be later than endDate", 400));
     }
 
-    // ────────────────────────────────────────────────
-    // MOST IMPORTANT PART: use local date parts (not UTC)
-    // This preserves "what the user saw / intended"
-    // ────────────────────────────────────────────────
-    startDate = new Date(
-      Date.UTC(
-        startInput.getFullYear(),
-        startInput.getMonth(),
-        startInput.getDate(),
-      ),
-    );
+    startDate = startInput;
+    endDate = endInput;
 
-    endDate = new Date(
-      Date.UTC(endInput.getFullYear(), endInput.getMonth(), endInput.getDate()),
-    );
-
-    // Calculate number of calendar days (inclusive)
     const diffMs = endDate - startDate;
+
     totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
   } else {
-    // No range → today (single day)
+    // default today
+
     const today = new Date();
+
     startDate = new Date(
       Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()),
     );
+
     endDate = startDate;
+
     totalDays = 1;
   }
 
-  /* ---------- WORKER EXISTENCE CHECK ---------- */
+  /* ---------- WORKER CHECK ---------- */
+
   const workers = await workerModel
     .find({
       tenantId,
@@ -2211,23 +2356,32 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
     return next(new AppError("One or more workers not found or inactive", 400));
   }
 
-  /* ---------- MODEL SELECTION ---------- */
+  /* ---------- MODEL ---------- */
+
   const LeaveModel = leaveType === "holiday" ? holidayModel : sicknessModel;
 
   /* ---------- PAYLOAD ---------- */
+
   const payload = workerIds.map((wid) => ({
     tenantId,
+
     workerId: wid,
+
     duration: {
-      startDate, // now correctly 2026-02-12 00:00:00Z if client sent Feb 12
+      startDate,
+
       endDate,
+
       totalDays,
     },
+
     ...(leaveType === "holiday" ? { reason } : { description: reason }),
   }));
 
   /* ---------- SAVE ---------- */
+
   let leaveRequest;
+
   if (payload.length === 1) {
     leaveRequest = await LeaveModel.create(payload[0]);
   } else {
@@ -2235,11 +2389,16 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
   }
 
   /* ---------- RESPONSE ---------- */
+
   return sendSuccess(
     res,
+
     "Leave request submitted successfully",
+
     leaveRequest,
+
     201,
+
     true,
   );
 });

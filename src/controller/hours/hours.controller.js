@@ -305,6 +305,10 @@ exports.updateWorkerHours = catchAsync(async (req, res, next) => {
 
   // ✅ SAFE ASSIGNMENT
   if (project) hoursDoc.project = project;
+  if (project.project_date) {
+    const [day, month, year] = project.project_date.split("/");
+    project.project_date = new Date(Date.UTC(year, month - 1, day));
+  }
   if (typeof day_off === "boolean") hoursDoc.day_off = day_off;
 
   if (start_working_hours) {
