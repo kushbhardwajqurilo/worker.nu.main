@@ -213,6 +213,10 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
   };
 
   const parsedProject = safeParse(project);
+  if (parsedProject.project_date) {
+    const [day, month, year] = parsedProject.project_date.split("/");
+    parsedProject.project_date = new Date(Date.UTC(year, month - 1, day));
+  }
   const parsedStartHours = safeParse(start_working_hours);
   const parsedFinishHours = safeParse(finish_hours);
   const parseComments = safeParse(comments);
