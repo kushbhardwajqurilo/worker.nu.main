@@ -7,6 +7,8 @@ const authRouter = require("./src/routes/auth.routes");
 const workerRouter = require("./src/routes/worker.routes");
 const clientRouter = require("./src/routes/client.routes");
 const path = require("path");
+const fs = require("fs");
+const morgan = require("morgan");
 const jwt = require("jsonwebtoken");
 const {
   authMiddeware,
@@ -48,6 +50,25 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization", "Tenant-Id"],
+  }),
+);
+const logDirectory = path.join(__dirname, "public");
+
+// ensure public folder exists
+if (!fs.existsSync(logDirectory)) {
+  fs.mkdirSync(logDirectory);
+}
+
+// create write stream
+const accessLogStream = fs.createWriteStream(
+  path.join(logDirectory, "access.log"),
+  { flags: "a" }, // append mode
+);
+
+// use morgan middleware
+app.use(
+  morgan(":remote-addr :method :url :status :response-time ms :date[iso]", {
+    stream: accessLogStream,
   }),
 );
 
