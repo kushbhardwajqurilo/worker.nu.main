@@ -67,7 +67,7 @@ const accessLogStream = fs.createWriteStream(
 
 // use morgan middleware
 app.use(
-  morgan(":remote-addr :method :url :status :response-time ms :date[iso]", {
+  morgan("combined", {
     stream: accessLogStream,
   }),
 );
