@@ -279,7 +279,7 @@ exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("invalid tenant-id", 400));
   }
-  const { l_id, leave, w_id } = req.query;
+  const { l_id, leave, w_id, duration } = req.query;
   if (
     !mongoose.Types.ObjectId.isValid(admin_id) ||
     !mongoose.Types.ObjectId.isValid(l_id) ||
@@ -340,6 +340,14 @@ exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
       worker.worker_holiday.holidays_taken + 1;
 
     await worker.save();
+    const notificationPayload = {
+      tenantId,
+      userId: w_id,
+      title: `Your ${leave} has been Approved`,
+      message: `${duration}`,
+      type: "INFO",
+    };
+    const ress = await Notification.create(notificationPayload);
     return sendSuccess(res, "holiday request approved", {}, 201, true);
   } else {
     return next(new AppError("Invalid Request Type", 400));
@@ -354,7 +362,7 @@ exports.RejectLeaveRequest = catchAsync(async (req, res, next) => {
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("invalid tenant-id", 400));
   }
-  const { l_id, leave, w_id } = req.query;
+  const { l_id, leave, w_id, duration } = req.query;
   if (
     !mongoose.Types.ObjectId.isValid(admin_id) ||
     !mongoose.Types.ObjectId.isValid(l_id) ||
@@ -399,7 +407,14 @@ exports.RejectLeaveRequest = catchAsync(async (req, res, next) => {
     holidays.status = "rejected";
     holidays.approvedAt = Date.now();
     await holidays.save();
-
+    const notificationPayload = {
+      tenantId,
+      userId: w_id,
+      title: `Your ${leave} has been Rejected`,
+      message: `${duration}`,
+      type: "INFO",
+    };
+    const ress = await Notification.create(notificationPayload);
     return sendSuccess(res, "holiday request reject success", {}, 201, true);
   } else {
     return next(new AppError("Invalid Request Type", 400));
