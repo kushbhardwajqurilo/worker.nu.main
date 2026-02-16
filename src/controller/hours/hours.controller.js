@@ -2639,6 +2639,253 @@ exports.checkSubmitHoursOnDateForClientWorker = catchAsync(
 //   return res.status(200).send(pdfBuffer);
 // });
 
+// exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+//   const { p_id, w_id, status, date } = req.body;
+
+//   if (!tenantId) return next(new AppError("Tenant-id missing", 400));
+//   if (!Array.isArray(p_id) || !p_id.length)
+//     return next(new AppError("Invalid Project Id", 400));
+//   if (!Array.isArray(w_id) || !w_id.length)
+//     return next(new AppError("Worker Ids missing", 400));
+//   if (!status) return next(new AppError("Status missing", 400));
+//   if (!date?.start || !date?.end)
+//     return next(new AppError("Date range missing", 400));
+
+//   /* ---------- DATE RANGE ---------- */
+
+//   const startDate = new Date(date.start);
+//   startDate.setHours(0, 0, 0, 0);
+
+//   const endDate = new Date(date.end);
+//   endDate.setHours(23, 59, 59, 999);
+
+//   /* ---------- DB FETCH ---------- */
+
+//   const [hoursData, projectData, organization] = await Promise.all([
+//     hoursModel.aggregate([
+//       {
+//         $match: {
+//           tenantId,
+//           workerId: { $in: w_id.map((id) => new mongoose.Types.ObjectId(id)) },
+//           "project.projectId": {
+//             $in: p_id.map((id) => new mongoose.Types.ObjectId(id)),
+//           },
+//           status,
+//           "project.project_date": { $gte: startDate, $lte: endDate },
+//         },
+//       },
+
+//       /* ---------- WORKER JOIN ---------- */
+//       {
+//         $lookup: {
+//           from: "workers",
+//           localField: "workerId",
+//           foreignField: "_id",
+//           as: "worker",
+//         },
+//       },
+//       { $unwind: "$worker" },
+
+//       /* ---------- POSITION JOIN ---------- */
+//       {
+//         $lookup: {
+//           from: "worker_positions",
+//           localField: "worker.worker_position",
+//           foreignField: "_id",
+//           as: "position",
+//         },
+//       },
+
+//       /* ---------- FINAL PROJECT ---------- */
+//       {
+//         $project: {
+//           workerId: 1,
+//           project: 1,
+//           status: 1,
+//           start_working_hours: 1,
+//           finish_hours: 1,
+//           total_hours: 1,
+
+//           // ✅ IMPORTANT
+//           worker_createdAt: "$worker.createdAt",
+
+//           worker_personal_details: "$worker.worker_personal_details",
+//           worker_signature: "$worker.signature",
+//           worker_position: {
+//             $arrayElemAt: ["$position.position", 0],
+//           },
+//         },
+//       },
+//     ]),
+
+//     projectMode
+//       .findOne({ _id: p_id[0], tenantId })
+//       .populate({
+//         path: "client_details.client",
+//         select: "client_details clientSignature",
+//       })
+//       .select(
+//         "project_details.project_name client_details project_details_for_workers.description",
+//       )
+//       .lean(),
+
+//     adminModel.findOne({ tenantId }).select("company_name").lean(),
+//   ]);
+
+//   if (!hoursData?.length) {
+//     return res.status(200).json({
+//       status: "success",
+//       message: "Report data not found",
+//       pdfUrl: null,
+//     });
+//   }
+
+//   /* ---------- GROUP BY WORKER ---------- */
+
+//   const workerMap = new Map();
+
+//   for (const item of hoursData) {
+//     const workerId = item.workerId.toString();
+
+//     if (!workerMap.has(workerId)) {
+//       workerMap.set(workerId, {
+//         contractor: organization.company_name,
+//         client: {
+//           name: projectData.client_details.client.client_details.client_name,
+//           project_name: projectData.project_details.project_name,
+//           signature: projectData.client_details.client.clientSignature,
+//         },
+//         worker_details: {
+//           ...item.worker_personal_details,
+//           signature: item.worker_signature,
+//           position: item.worker_position || "",
+//         },
+//         hours_data: [],
+//       });
+//     }
+
+//     workerMap.get(workerId).hours_data.push({
+//       project: item.project,
+
+//       // ✅ DYNAMIC WEEK NUMBER
+//       weekNumber: getWeeksCreated(item.worker_createdAt, startDate),
+
+//       task: projectData.project_details_for_workers.description,
+//       status: item.status,
+//       start_working_hours: item.start_working_hours,
+//       finish_hours: item.finish_hours,
+//       total_hours: item.total_hours,
+//     });
+//   }
+
+//   const groupedData = [...workerMap.values()];
+
+//   /* ---------- HTML BUILD ---------- */
+
+//   const template = await fs.promises.readFile(
+//     path.join(process.cwd(), "src/templates/weeklyTimeSheet.html"),
+//     "utf8",
+//   );
+
+//   const showSignature = status === "approved";
+
+//   const pagesHtml = groupedData
+//     .map((worker) => {
+//       let total = 0;
+
+//       const rows = worker.hours_data
+//         .map((h) => {
+//           total += h.total_hours;
+
+//           return `
+//           <tr>
+//             <td>${new Date(h.project.project_date).toLocaleDateString()}</td>
+//             <td>${h.task}</td>
+//             <td>${worker.worker_details.position}</td>
+//             <td>${h.start_working_hours.hours}:${h.start_working_hours.minutes}</td>
+//             <td>${h.finish_hours.hours}:${h.finish_hours.minutes}</td>
+//             <td>${h.total_hours}</td>
+//           </tr>`;
+//         })
+//         .join("");
+
+//       return `
+//       <div class="page">
+//         <h1>Weekly time sheet</h1>
+
+//         <div class="row">
+//           <div>Contractor: ${worker.contractor}</div>
+//           <div>Client: ${worker.client.name}</div>
+//         </div>
+
+//         <div class="row">
+//           <div>Project: ${worker.client.project_name}</div>
+//         </div>
+
+//         <div class="box-row">
+//           <div class="box">First name: ${worker.worker_details.firstName}</div>
+//           <div class="box">Last name: ${worker.worker_details.lastName}</div>
+//           <div class="box">Week nr: ${worker.hours_data[0].weekNumber}</div>
+//         </div>
+
+//         <table>
+//           <thead>
+//             <tr>
+//               <th>Date</th>
+//               <th>Task description</th>
+//               <th>Job Name</th>
+//               <th>Time Started</th>
+//               <th>Time stopped</th>
+//               <th>Time total</th>
+//             </tr>
+//           </thead>
+//           <tbody>${rows}</tbody>
+//         </table>
+
+//         <div class="total-box">
+//           <strong>Total:</strong>
+//           <div class="total-value">${total.toFixed(2)}</div>
+//         </div>
+
+//         <div class="sign-row">
+//           <div>
+//             <div class="line">
+//               ${
+//                 showSignature && worker.worker_details.signature
+//                   ? `<img src="${worker.worker_details.signature}" class="signature-img" />`
+//                   : ""
+//               }
+//               Employee:
+//             </div>
+//           </div>
+
+//           <div>
+//             <div class="line">
+//               ${
+//                 showSignature && worker.client.signature
+//                   ? `<img src="${worker.client.signature}" class="signature-img" />`
+//                   : ""
+//               }
+//               Supervisor:
+//             </div>
+//           </div>
+//         </div>
+//       </div>`;
+//     })
+//     .join("");
+
+//   const finalHtml = template.replace("{{PAGES}}", pagesHtml);
+//   const pdfBuffer = await generateTimesheetPDFBuffer(finalHtml);
+
+//   res.set({
+//     "Content-Type": "application/pdf",
+//     "Content-Disposition": "inline; filename=weekly_timesheet.pdf",
+//   });
+
+//   return res.status(200).send(pdfBuffer);
+// });
+
 exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
   const { p_id, w_id, status, date } = req.body;
@@ -2653,7 +2900,7 @@ exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
     return next(new AppError("Date range missing", 400));
 
   /* ---------- DATE RANGE ---------- */
-
+  console.log(date);
   const startDate = new Date(date.start);
   startDate.setHours(0, 0, 0, 0);
 
@@ -2752,9 +2999,11 @@ exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
       workerMap.set(workerId, {
         contractor: organization.company_name,
         client: {
-          name: projectData.client_details.client.client_details.client_name,
-          project_name: projectData.project_details.project_name,
-          signature: projectData.client_details.client.clientSignature,
+          name:
+            projectData?.client_details?.client?.client_details?.client_name ||
+            "",
+          project_name: projectData?.project_details?.project_name,
+          signature: projectData?.client_details?.client?.clientSignature,
         },
         worker_details: {
           ...item.worker_personal_details,

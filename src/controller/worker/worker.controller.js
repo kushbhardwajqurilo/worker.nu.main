@@ -28,6 +28,8 @@ const {
 const { Notification } = require("../../models/reminder.model");
 const parseDottedObject = require("../../utils/parseObject");
 const getWeekRange = require("../../utils/weekRange");
+const keepSameDateUTC = require("../../utils/keepSameDate");
+
 // ----------------------------------------- ADMIN DASHBOARD API'S -----------------------------------------------
 
 // <---------- Add Worker Start Here ------------>
@@ -2404,38 +2406,6 @@ exports.getAllProjectsToWorkerAddController = catchAsync(
 // });
 
 /* ------------------------------------------------ */
-function keepSameDateUTC(dateInput, endOfDay = false) {
-  if (!dateInput) return null;
-
-  const local = new Date(dateInput);
-  if (isNaN(local)) return null;
-
-  if (endOfDay) {
-    return new Date(
-      Date.UTC(
-        local.getFullYear(),
-        local.getMonth(),
-        local.getDate(),
-        23,
-        59,
-        59,
-        999,
-      ),
-    );
-  }
-
-  return new Date(
-    Date.UTC(
-      local.getFullYear(),
-      local.getMonth(),
-      local.getDate(),
-      0,
-      0,
-      0,
-      0,
-    ),
-  );
-}
 
 /* ------------------------------------------------ */
 /* REQUEST LEAVE                                   */
@@ -2511,7 +2481,7 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
     totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
   } else {
     const today = new Date();
-    startDate = keepSameDateUTCk(today);
+    startDate = keepSameDateUTC(today);
     endDate = keepSameDateUTC(today, true);
     totalDays = 1;
   }

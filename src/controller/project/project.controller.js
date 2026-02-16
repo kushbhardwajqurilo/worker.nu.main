@@ -8,6 +8,7 @@ const { default: mongoose } = require("mongoose");
 const { workerModel } = require("../../models/workerModel");
 const clientModel = require("../../models/clientModel");
 const hoursModel = require("../../models/hoursModel");
+const keepSameDateUTC = require("../../utils/keepSameDate");
 
 // exports.addProjectController = catchAsync(async (req, res, next) => {
 //   const { tenantId } = req;
@@ -162,10 +163,8 @@ exports.addProjectController = catchAsync(async (req, res, next) => {
     "project_details",
   );
   if (project_details.project_start_date) {
-    const [month, day, year] = project_details.project_start_date.split("/");
-
-    project_details.project_start_date = new Date(
-      Date.UTC(year, month - 1, day),
+    project_details.project_start_date = keepSameDateUTC(
+      project_details.project_start_date,
     );
   }
   const daily_work_hour_raw = parseJSON(
@@ -1164,13 +1163,10 @@ exports.updateProjectController = catchAsync(async (req, res, next) => {
     );
   }
   if (setUpdate.project_details.project_start_date) {
-    const [month, day, year] =
-      setUpdate.project_details.project_start_date.split("/");
-    setUpdate.project_details.project_start_date = new Date(
-      Date.UTC(year, month - 1, day),
+    setUpdate.project_details.project_start_date = keepSameDateUTC(
+      setUpdate.project_details.project_start_date,
     );
   }
-  console.log(setUpdate);
   if (req.body.daily_work_hour) {
     const dwh = parseJSON(req.body.daily_work_hour, "daily_work_hour");
     setUpdate.daily_work_hour = {
