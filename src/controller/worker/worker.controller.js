@@ -2246,20 +2246,200 @@ exports.getAllProjectsToWorkerAddController = catchAsync(
 
 // <------new code for date 14/2/26 --------
 // helper function
-function createUTCDate(dateString) {
-  if (!dateString) return null;
+// function createUTCDate(dateString) {
+//   if (!dateString) return null;
 
-  const parts = dateString.split("/");
+//   const parts = dateString.split("/");
 
-  if (parts.length !== 3) return null;
+//   if (parts.length !== 3) return null;
 
-  const day = parseInt(parts[0], 10);
-  const month = parseInt(parts[1], 10);
-  const year = parseInt(parts[2], 10);
+//   const day = parseInt(parts[0], 10);
+//   const month = parseInt(parts[1], 10);
+//   const year = parseInt(parts[2], 10);
 
-  return new Date(Date.UTC(year, month - 1, day));
+//   return new Date(Date.UTC(year, month - 1, day));
+// }
+
+// exports.requestLeave = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+//   const { leaveType, reason, range, workerIds: bodyWorkerIds } = req.body;
+
+//   if (!tenantId) {
+//     return next(new AppError("tenant-id missing", 400));
+//   }
+
+//   if (!isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid tenant-id", 400));
+//   }
+
+//   /* ---------- WORKER ID NORMALIZATION ---------- */
+
+//   let workerIds = [];
+
+//   if (Array.isArray(bodyWorkerIds) && bodyWorkerIds.length > 0) {
+//     workerIds = bodyWorkerIds;
+//   } else if (req.worker_id) {
+//     workerIds = [req.worker_id];
+//   }
+
+//   if (!workerIds.length) {
+//     return next(new AppError("worker_id missing", 400));
+//   }
+
+//   workerIds = workerIds.map((wid) => {
+//     if (!mongoose.Types.ObjectId.isValid(wid)) {
+//       return next(new AppError(`Invalid worker_id: ${wid}`, 400));
+//     }
+//     return new mongoose.Types.ObjectId(wid);
+//   });
+
+//   /* ---------- BODY VALIDATION ---------- */
+
+//   if (!leaveType || !["holiday", "sickness"].includes(leaveType)) {
+//     return next(new AppError("Invalid leaveType (holiday | sickness)", 400));
+//   }
+
+//   if (!reason) {
+//     return next(new AppError("reason is required", 400));
+//   }
+
+//   /* ---------- DATE RANGE HANDLING ---------- */
+
+//   let startDate;
+//   let endDate;
+//   let totalDays = 1;
+//   console.log(range);
+//   if (range && range.startDate && range.endDate) {
+//     // ✅ FIXED: using Date.UTC function
+//     const startInput = createUTCDate(range.startDate);
+//     const endInput = createUTCDate(range.endDate);
+//     if (!startInput || !endInput) {
+//       return next(new AppError("Invalid startDate or endDate format", 400));
+//     }
+
+//     if (startInput > endInput) {
+//       return next(new AppError("startDate cannot be later than endDate", 400));
+//     }
+
+//     startDate = startInput;
+//     endDate = endInput;
+
+//     const diffMs = endDate - startDate;
+
+//     totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
+//   } else {
+//     // default today
+
+//     const today = new Date();
+
+//     startDate = new Date(
+//       Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()),
+//     );
+
+//     endDate = startDate;
+
+//     totalDays = 1;
+//   }
+
+//   /* ---------- WORKER CHECK ---------- */
+
+//   const workers = await workerModel
+//     .find({
+//       tenantId,
+//       _id: { $in: workerIds },
+//       isDelete: false,
+//       isActive: true,
+//     })
+//     .lean();
+
+//   if (workers.length !== workerIds.length) {
+//     return next(new AppError("One or more workers not found or inactive", 400));
+//   }
+
+//   /* ---------- MODEL ---------- */
+
+//   const LeaveModel = leaveType === "holiday" ? holidayModel : sicknessModel;
+
+//   /* ---------- PAYLOAD ---------- */
+
+//   const payload = workerIds.map((wid) => ({
+//     tenantId,
+
+//     workerId: wid,
+
+//     duration: {
+//       startDate,
+
+//       endDate,
+
+//       totalDays,
+//     },
+
+//     ...(leaveType === "holiday" ? { reason } : { description: reason }),
+//   }));
+
+//   /* ---------- SAVE ---------- */
+
+//   let leaveRequest;
+
+//   if (payload.length === 1) {
+//     leaveRequest = await LeaveModel.create(payload[0]);
+//   } else {
+//     leaveRequest = await LeaveModel.create(payload);
+//   }
+
+//   /* ---------- RESPONSE ---------- */
+
+//   return sendSuccess(
+//     res,
+
+//     "Leave request submitted successfully",
+
+//     leaveRequest,
+
+//     201,
+
+//     true,
+//   );
+// });
+
+/* ------------------------------------------------ */
+function keepSameDateUTC(dateInput, endOfDay = false) {
+  if (!dateInput) return null;
+
+  const local = new Date(dateInput);
+  if (isNaN(local)) return null;
+
+  if (endOfDay) {
+    return new Date(
+      Date.UTC(
+        local.getFullYear(),
+        local.getMonth(),
+        local.getDate(),
+        23,
+        59,
+        59,
+        999,
+      ),
+    );
+  }
+
+  return new Date(
+    Date.UTC(
+      local.getFullYear(),
+      local.getMonth(),
+      local.getDate(),
+      0,
+      0,
+      0,
+      0,
+    ),
+  );
 }
 
+/* ------------------------------------------------ */
+/* REQUEST LEAVE                                   */
+/* ------------------------------------------------ */
 exports.requestLeave = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
   const { leaveType, reason, range, workerIds: bodyWorkerIds } = req.body;
@@ -2286,12 +2466,15 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
     return next(new AppError("worker_id missing", 400));
   }
 
-  workerIds = workerIds.map((wid) => {
+  // validate first
+  for (const wid of workerIds) {
     if (!mongoose.Types.ObjectId.isValid(wid)) {
       return next(new AppError(`Invalid worker_id: ${wid}`, 400));
     }
-    return new mongoose.Types.ObjectId(wid);
-  });
+  }
+
+  // convert
+  workerIds = workerIds.map((wid) => new mongoose.Types.ObjectId(wid));
 
   /* ---------- BODY VALIDATION ---------- */
 
@@ -2310,11 +2493,11 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
   let totalDays = 1;
 
   if (range && range.startDate && range.endDate) {
-    // ✅ FIXED: using Date.UTC function
-    const startInput = createUTCDate(range.startDate);
-    const endInput = createUTCDate(range.endDate);
+    const startInput = keepSameDateUTC(range.startDate);
+    const endInput = keepSameDateUTC(range.endDate, true);
+
     if (!startInput || !endInput) {
-      return next(new AppError("Invalid startDate or endDate format", 400));
+      return next(new AppError("Invalid startDate or endDate", 400));
     }
 
     if (startInput > endInput) {
@@ -2325,22 +2508,14 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
     endDate = endInput;
 
     const diffMs = endDate - startDate;
-
     totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
   } else {
-    // default today
-
     const today = new Date();
-
-    startDate = new Date(
-      Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()),
-    );
-
-    endDate = startDate;
-
+    startDate = keepSameDateUTCk(today);
+    endDate = keepSameDateUTC(today, true);
     totalDays = 1;
   }
-
+  console.log({ startDate, endDate });
   /* ---------- WORKER CHECK ---------- */
 
   const workers = await workerModel
@@ -2364,17 +2539,12 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
 
   const payload = workerIds.map((wid) => ({
     tenantId,
-
     workerId: wid,
-
     duration: {
       startDate,
-
       endDate,
-
       totalDays,
     },
-
     ...(leaveType === "holiday" ? { reason } : { description: reason }),
   }));
 
@@ -2385,20 +2555,16 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
   if (payload.length === 1) {
     leaveRequest = await LeaveModel.create(payload[0]);
   } else {
-    leaveRequest = await LeaveModel.create(payload);
+    leaveRequest = await LeaveModel.insertMany(payload);
   }
 
   /* ---------- RESPONSE ---------- */
 
   return sendSuccess(
     res,
-
     "Leave request submitted successfully",
-
     leaveRequest,
-
     201,
-
     true,
   );
 });

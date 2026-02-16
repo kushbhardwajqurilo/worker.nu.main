@@ -319,6 +319,15 @@ exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
     worker.worker_holiday.sickness_taken =
       worker.worker_holiday.sickness_taken + 1;
     await worker.save();
+    const notificationPayload = {
+      tenantId,
+      userId: w_id,
+      title: `Your ${leave} has been Approved`,
+      message: `${duration}`,
+      type: "INFO",
+    };
+
+    const ress = await Notification.create(notificationPayload);
     return sendSuccess(res, "sick leave request approved", {}, 201, true);
   } else if (leave === "holiday") {
     const holidays = await holidayModel.findOne({ tenantId, _id: l_id });
@@ -347,6 +356,7 @@ exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
       message: `${duration}`,
       type: "INFO",
     };
+
     const ress = await Notification.create(notificationPayload);
     return sendSuccess(res, "holiday request approved", {}, 201, true);
   } else {
