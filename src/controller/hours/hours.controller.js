@@ -172,6 +172,7 @@ const adminModel = require("../../models/authmodel/adminModel");
 const calculateEvaluation = require("../../utils/calculateEvaluation");
 const getWeeksSinceCreated = require("../../utils/calculateWeekNo");
 const getWeeksCreated = require("../../utils/week");
+const keepSameDateUTC = require("../../utils/keepSameDate");
 
 exports.createWorkerHours = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
@@ -214,8 +215,7 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
 
   const parsedProject = safeParse(project);
   if (parsedProject.project_date) {
-    const [day, month, year] = parsedProject.project_date.split("/");
-    parsedProject.project_date = new Date(Date.UTC(year, month - 1, day));
+    parsedProject.project_date = keepSameDateUTC(parsedProject.project_date);
   }
   const parsedStartHours = safeParse(start_working_hours);
   const parsedFinishHours = safeParse(finish_hours);
@@ -305,9 +305,8 @@ exports.updateWorkerHours = catchAsync(async (req, res, next) => {
 
   // ✅ SAFE ASSIGNMENT
   if (project) hoursDoc.project = project;
-  if (project.project_date) {
-    const [day, month, year] = project.project_date.split("/");
-    project.project_date = new Date(Date.UTC(year, month - 1, day));
+  if (hoursDoc.project.project_date) {
+    hoursDoc.project.project_date = keepSameDateUTC(project.project_date);
   }
   if (typeof day_off === "boolean") hoursDoc.day_off = day_off;
 
