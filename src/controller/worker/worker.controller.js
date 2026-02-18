@@ -750,7 +750,7 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant-id", 400));
   }
-
+  console.log("body", req.body);
   const { w_id } = req.query;
   if (!w_id) {
     return next(new AppError("Worker credential missing", 400));
@@ -838,11 +838,22 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
     });
   }
   // ---------- 🚨 PREVENT MONGO PATH CONFLICT ----------
-  if (
-    Object.keys(documentsUpdate).length == 0 ||
-    otherFilesToPush.length == 0
-  ) {
-    delete data.personal_information;
+  if (Object.keys(documentsUpdate).length == 0) {
+    delete data.personal_information.upload_docs.profile_picture;
+    delete data.personal_information.upload_docs.worker_work_id;
+    delete data.personal_information.upload_docs.drivers_license;
+    delete data.personal_information.upload_docs.passport;
+    delete data.personal_information.upload_docs.national_id_card;
+  }
+
+  if (otherFilesToPush.length === 0) {
+    data.personal_information.upload_docs.other_files.forEach((files) => {
+      otherFilesToPush.push({
+        folderName: "other_files",
+        file: files,
+      });
+    });
+    delete data.personal_information.upload_docs;
   }
 
   // ---------- FINAL UPDATE QUERY ----------
@@ -860,7 +871,7 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
       },
     };
   }
-
+  console.log("updateQuery", updateQuery);
   // ---------- UPDATE DB ----------
   const updatedWorker = await workerModel.findOneAndUpdate(
     { tenantId, _id: w_id },
