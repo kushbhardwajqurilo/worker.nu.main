@@ -750,7 +750,7 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant-id", 400));
   }
-  console.log("body", req.body);
+  // console.log("body", req.body);
   const { w_id } = req.query;
   if (!w_id) {
     return next(new AppError("Worker credential missing", 400));
@@ -775,7 +775,7 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
     project: safeParse(req.body.project),
     language: safeParse(req.body.language),
     worker_economical_data: safeParse(req.body.worker_economical_data),
-    personal_information: safeParse(req.body.personal_information),
+    // personal_information: safeParse(req.body.personal_information),
     isActive: safeParse(req.body.isActive),
   };
 
@@ -788,7 +788,8 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
   // ---------- FILE HANDLING ----------
   const documentsUpdate = {};
   const otherFilesToPush = [];
-
+  let isOther_files = false;
+  console.log("req Files", req.files);
   if (Array.isArray(req.files)) {
     req.files.forEach((file) => {
       const field = file.fieldname;
@@ -809,6 +810,7 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
       // ---- OTHER FILES ----
       const match = field.match(/other_files\.(\d+)\.files/);
       if (match) {
+        isOther_files = true;
         const index = Number(match[1]);
         const exists =
           worker.personal_information?.documents?.other_files?.[index];
@@ -828,6 +830,7 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
             `personal_information.documents.other_files.${index}.folderName`
           ] = folderName;
         } else {
+          isOther_files = true;
           // ADD
           otherFilesToPush.push({
             folderName,
@@ -836,24 +839,40 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
         }
       }
     });
+  } else {
+    documentsUpdate[`personal_information`] = safeParse(
+      req.personal_information,
+    );
   }
   // ---------- 🚨 PREVENT MONGO PATH CONFLICT ----------
-  if (Object.keys(documentsUpdate).length == 0) {
-    delete data.personal_information.upload_docs.profile_picture;
-    delete data.personal_information.upload_docs.worker_work_id;
-    delete data.personal_information.upload_docs.drivers_license;
-    delete data.personal_information.upload_docs.passport;
-    delete data.personal_information.upload_docs.national_id_card;
-  }
+  // if (Object.keys(documentsUpdate).length == 0) {
+  //   // delete data.personal_information.upload_docs.profile_picture;
+  //   // delete data.personal_information.upload_docs.worker_work_id;
+  //   // delete data.personal_information.upload_docs.drivers_license;
+  //   // delete data.personal_information.upload_docs.passport;
+  //   // delete data.personal_information.upload_docs.national_id_card;
+  //   delete
+  // }
 
-  if (otherFilesToPush.length === 0) {
-    data.personal_information.upload_docs.other_files.forEach((files) => {
+  // if (otherFilesToPush.length === 0) {
+  //   data.personal_information.upload_docs.other_files.forEach((files) => {
+  //     otherFilesToPush.push({
+  //       folderName: "other_files",
+  //       file: files,
+  //     });
+  //   });
+  //   delete data.personal_information.upload_docs;
+  // }
+  if (!isOther_files) {
+    const files = safeParse(req.body.personal_information);
+    // console.log("files", files);
+    files?.upload_docs?.other_files?.forEach((files) => {
       otherFilesToPush.push({
         folderName: "other_files",
         file: files,
       });
     });
-    delete data.personal_information.upload_docs;
+    // delete data.personal_information.upload_docs;
   }
 
   // ---------- FINAL UPDATE QUERY ----------
@@ -864,14 +883,24 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
     },
   };
 
-  if (otherFilesToPush.length > 0) {
+  // if (otherFilesToPush.length > 0) {
+  //   updateQuery.$push = {
+  //     "personal_information.documents.other_files": {
+  //       $each: otherFilesToPush,
+  //     },
+  //   };
+  // }
+  if (isOther_files) {
     updateQuery.$push = {
       "personal_information.documents.other_files": {
         $each: otherFilesToPush,
       },
     };
+  } else {
+    updateQuery["personal_information.documents.other_files"] =
+      otherFilesToPush;
   }
-  console.log("updateQuery", updateQuery);
+  console.log("otherFilesToPush", otherFilesToPush);
   // ---------- UPDATE DB ----------
   const updatedWorker = await workerModel.findOneAndUpdate(
     { tenantId, _id: w_id },
@@ -3429,7 +3458,6 @@ exports.LastAndThisWeekTotalHours = catchAsync(async (req, res, next) => {
 
 exports.requestInformation = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
-
   /* ---------- VALIDATIONS ---------- */
   if (!tenantId) {
     return next(new AppError("Tenant missing", 400));

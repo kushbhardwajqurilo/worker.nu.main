@@ -18,7 +18,7 @@ const workerRequestSchema = new mongoose.Schema(
       date_of_birth: { type: Boolean, default: false },
       address_details: { type: Boolean, default: false },
       tax_identification_number: { type: Boolean, default: false },
-
+      closeEmail: { type: Boolean, default: false },
       firstName: { type: Boolean, default: false },
       lastName: { type: Boolean, default: false },
       phone: { type: Boolean, default: false },
