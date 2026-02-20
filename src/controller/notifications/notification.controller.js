@@ -28,22 +28,26 @@ exports.createNotification = catchAsync(async (userId, tenantId) => {
   return sendSuccess(res, "Notificaton Send Successfully", {}, 200, true);
 });
 exports.getNotificationToWorker = catchAsync(async (req, res, next) => {
-  const { tenantId, worker_id } = req;
+  const { tenantId, worker_id, admin_id } = req;
   if (!tenantId) {
     return new AppError("Tenantid missing", 400);
   }
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invaid Tenant-id", 400));
   }
-  if (!worker_id) {
-    return next(new AppError("worker id missig", 400));
+  if (worker_id) {
+    if (!mongoose.Types.ObjectId.isValid(worker_id)) {
+      return next(new AppError("Invalid worker id", 400));
+    }
   }
-  if (!mongoose.Types.ObjectId.isValid(worker_id)) {
-    return next(new AppError("Invalid worker id", 400));
+  if (admin_id) {
+    if (!mongoose.Types.ObjectId.isValid(admin_id)) {
+      return next(new AppError("Invalid admin id", 400));
+    }
   }
   const payload = {
     tenantId,
-    userId: worker_id,
+    userId: worker_id ? worker_id : admin_id,
   };
   const notifications = await Notification.find(payload)
     .select("-tenantId -userId -__v")
@@ -57,7 +61,7 @@ exports.getNotificationToWorker = catchAsync(async (req, res, next) => {
 
 // <------------ read notification ---------------->
 exports.markAsRead = catchAsync(async (req, res, next) => {
-  const { tenantId, worker_id } = req;
+  const { tenantId, worker_id, admin_id } = req;
   const { id } = req.params;
   if (!tenantId) {
     return new AppError("Tenantid missing", 400);
@@ -65,16 +69,20 @@ exports.markAsRead = catchAsync(async (req, res, next) => {
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invaid Tenant-id", 400));
   }
-  if (!worker_id) {
-    return next(new AppError("worker id missig", 400));
+  if (worker_id) {
+    if (!mongoose.Types.ObjectId.isValid(worker_id)) {
+      return next(new AppError("Invalid worker id", 400));
+    }
   }
-  if (!mongoose.Types.ObjectId.isValid(worker_id)) {
-    return next(new AppError("Invalid worker id", 400));
+  if (admin_id) {
+    if (!mongoose.Types.ObjectId.isValid(admin_id)) {
+      return next(new AppError("Invalid admin id", 400));
+    }
   }
   const mark = await Notification.findOne({
     _id: id,
     tenantId,
-    userId: worker_id,
+    userId: worker_id ? worker_id : admin_id,
   });
   if (!mark) {
     return next(new AppError("notification found", 400));

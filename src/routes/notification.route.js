@@ -5,20 +5,21 @@ const {
 const {
   workerAuthMiddleware,
   accessMiddleware,
+  workerOrAdminAuthMiddleware,
 } = require("../middleware/authMiddleware");
 
 const notificationRouter = require("express").Router();
 
 notificationRouter.get(
   "/",
-  workerAuthMiddleware,
-  accessMiddleware("worker"),
+  workerOrAdminAuthMiddleware,
+  accessMiddleware("worker", "admin"),
   getNotificationToWorker,
 );
 notificationRouter.patch(
   "/:id",
-  workerAuthMiddleware,
-  accessMiddleware("worker"),
+  workerOrAdminAuthMiddleware,
+  accessMiddleware("worker", "admin"),
   markAsRead,
 );
 module.exports = notificationRouter;

@@ -29,6 +29,7 @@ const { Notification } = require("../../models/reminder.model");
 const parseDottedObject = require("../../utils/parseObject");
 const getWeekRange = require("../../utils/weekRange");
 const keepSameDateUTC = require("../../utils/keepSameDate");
+const adminModel = require("../../models/authmodel/adminModel");
 
 // ----------------------------------------- ADMIN DASHBOARD API'S -----------------------------------------------
 
@@ -3506,7 +3507,7 @@ exports.requestInformation = catchAsync(async (req, res, next) => {
       title: "Information Request",
       message: "Please Submit Your Information",
       userId: id,
-      type: "INFO",
+      type: "TASK",
       redirectUrl: process.env.workerInformationUrl,
     });
   }
@@ -3734,17 +3735,16 @@ const flattenObject = (obj, parent = "", res = {}) => {
 
 exports.updateWorkerDataToRequest = catchAsync(async (req, res, next) => {
   const { tenantId, worker_id } = req;
-
-  console.log("[DEBUG] Raw body keys:", Object.keys(req.body));
-  console.log(
-    "[DEBUG] Files:",
-    req.files?.map((f) => ({
-      fieldname: f.fieldname,
-      originalname: f.originalname,
-      path: f.path || f.location || "—",
-      secure_url: f.secure_url || "—",
-    })) || "no files",
-  );
+  // console.log("[DEBUG] Raw body keys:", Object.keys(req.body));
+  // console.log(
+  //   "[DEBUG] Files:",
+  //   req.files?.map((f) => ({
+  //     fieldname: f.fieldname,
+  //     originalname: f.originalname,
+  //     path: f.path || f.location || "—",
+  //     secure_url: f.secure_url || "—",
+  //   })) || "no files",
+  // );
 
   // ── Basic validations ───────────────────────────────────
   if (!tenantId || !isValidCustomUUID(tenantId)) {
@@ -3809,12 +3809,33 @@ exports.updateWorkerDataToRequest = catchAsync(async (req, res, next) => {
   if (!updated) {
     return next(new AppError("Worker not found or access denied", 404));
   }
-
-  res.json({
-    status: true,
-    message: "Worker updated",
-    data: updated,
+  const read = await Notification.findByIdAndUpdate(req.query.n_id, {
+    $set: { read: true },
   });
+  if (read) {
+    const [admin, worker] = await Promise.all([
+      adminModel.findOne({ tenantId }).select("_id"),
+      workerModel
+        .findOne({ tenantId, _id: worker_id })
+        .select("worker_personal_details"),
+    ]);
+    const notificationPayload = {
+      tenantId,
+      userId: admin._id,
+      message: `${worker.worker_personal_details.firstName + worker.worker_personal_details.lastName ? worker.worker_personal_details.lastName : ""} Submitted the requested info `,
+      title: "Info Submitted",
+      type: "INFO",
+    };
+    await Notification.create(notificationPayload);
+    res.json({
+      status: true,
+      message: "Worker updated",
+    });
+  } else {
+    return next(new AppError("failed to submit request", 400));
+  }
+
+  // Notification
 });
 
 // <----------- single worker all details  -------------->
