@@ -43,7 +43,7 @@ exports.addCompanyController = catchAsync(async (req, res, next) => {
     language: req.body.language,
     email: req.body.notification_email,
     company_name: req.body.company_name,
-    logo: req.files[0].path,
+    logo: req.files[0]?.path ? req.files[0]?.path : "",
   };
   const insert = await adminModel.updateOne(
     { tenantId },
@@ -70,7 +70,7 @@ exports.getCompanyDetailController = catchAsync(async (req, res, next) => {
   const find = await adminModel
     .findOne({ tenantId })
     .select(
-      "logo company_name phone timezone company_registration_no company_address email",
+      "logo company_name phone timezone company_registration_no company_address email language",
     );
   if (!find || find.length === 0) {
     return next(new AppError("failed to fatch", 400));
@@ -108,16 +108,12 @@ exports.addCompanyAlias = catchAsync(async (req, res, next) => {
 
   // ================= LOGO FILE =================
   const logoFile = req.files?.find((file) => file.fieldname === "logo");
-
-  if (!logoFile) {
-    return next(new AppError("logo Field Missing", 400));
-  }
   const payload = {
     tenantId,
 
     ...req.body,
 
-    logo: logoFile.path, // cloudinary URL
+    logo: logoFile?.path ? logoFile?.path : "", // cloudinary URL
   };
   await companyAliasModel.create(payload);
 
@@ -186,18 +182,21 @@ exports.updateCompanyAliasController = catchAsync(async (req, res, next) => {
   // ================= LOGO FILE =================
   const logoFile = req.files?.find((file) => file.fieldname === "logo");
 
-  if (!logoFile) {
-    return next(new AppError("logo Field Missing", 400));
-  }
   const payload = {
     tenantId,
-
     ...req.body,
-
-    logo: logoFile.path, // cloudinary URL
+    logo: logoFile?.path ? logoFile.path : "", // cloudinary URL
   };
-  await companyAliasModel.create(payload);
-
+  const com = await companyAliasModel.findOne({ tenantId });
+  if (!com) {
+    await companyAliasModel.create(payload);
+  } else {
+    await companyAliasModel.updateOne(
+      { tenantId },
+      { $set: payload },
+      { new: true },
+    );
+  }
   return sendSuccess(res, "Company alias added", {}, 201, true);
 });
 
@@ -255,3 +254,20 @@ exports.deleteMultipleCompanyAliasController = catchAsync(
   },
 );
 // <---------- Company Alida End ---------->
+
+// get commapny laguage
+exports.getCompanyLanguage = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  // ================= BASIC VALIDATION =================
+  if (!tenantId) {
+    return next(new AppError("tenant missing", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant-Id", 400));
+  }
+  const com = await adminModel.findOne({ tenantId }).select("language").lean();
+  if (!com) {
+    return next(new AppError("company not found", 400));
+  }
+  return sendSuccess(res, "success", com.language, 200, true);
+});

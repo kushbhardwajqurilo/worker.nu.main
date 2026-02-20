@@ -263,7 +263,7 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
     break_time: break_time === "undefined" || "" ? 0 : Number(breakTime),
     comments: parseComments,
     workerId: parsedWorkerId ? parsedWorkerId : workerId,
-    lateReason,
+    lateReason: safeParse(lateReason),
     createdBy: req.role,
   };
 

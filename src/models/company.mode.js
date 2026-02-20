@@ -2,7 +2,7 @@ const { default: mongoose } = require("mongoose");
 
 const companyAlias = new mongoose.Schema({
   tenantId: { type: String, required: [true, "tenant-id required"] },
-  logo: { type: String, required: [true, "Company Logo Required"] },
+  logo: { type: String, default: "" },
   company_name: { type: String, required: [true, "Company Name Requried"] },
   phone: { type: String, required: [true, "Company Phone Number Required"] },
   company_registration_no: {

@@ -7,6 +7,7 @@ const {
   deleteMultipleCompanyAliasController,
   addCompanyController,
   getCompanyDetailController,
+  getCompanyLanguage,
 } = require("../controller/company/company.controller");
 const {
   authMiddeware,
@@ -68,5 +69,11 @@ companyRouter.delete(
   authMiddeware,
   accessMiddleware("admin"),
   deleteMultipleCompanyAliasController,
+);
+companyRouter.get(
+  "/get-language",
+  authMiddeware,
+  accessMiddleware("admin"),
+  getCompanyLanguage,
 );
 module.exports = companyRouter;
