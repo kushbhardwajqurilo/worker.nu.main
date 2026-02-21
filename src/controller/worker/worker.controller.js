@@ -3481,7 +3481,7 @@ exports.requestInformation = catchAsync(async (req, res, next) => {
   if (!Array.isArray(workerId) || workerId.length === 0) {
     return next(new AppError("workerId must be an array", 400));
   }
-
+  const io = req.app.get("io");
   const notificationPayload = [];
 
   /* ---------- UPSERT REQUEST (REPLACE OR CREATE) ---------- */
@@ -3504,7 +3504,7 @@ exports.requestInformation = catchAsync(async (req, res, next) => {
 
     notificationPayload.push({
       tenantId,
-      title: "Information Request",
+      title: "Information Request:",
       message: "Please Submit Your Information",
       userId: id,
       type: "TASK",
@@ -3516,7 +3516,11 @@ exports.requestInformation = catchAsync(async (req, res, next) => {
   if (notificationPayload.length) {
     await Notification.insertMany(notificationPayload);
   }
-
+  for (id of workerId) {
+    const payload = notificationPayload[0];
+    payload._id = id;
+    io.to(`user_${id}`).emit("notification:new", payload);
+  }
   return sendSuccess(
     res,
     "Request sent successfully (old replaced if existed)",
@@ -3756,7 +3760,7 @@ exports.updateWorkerDataToRequest = catchAsync(async (req, res, next) => {
 
   // ── 1. Parse stringified JSON fields ────────────────────
   let body = { ...req.body };
-
+  const io = req.app.get("io");
   if (body.worker_personal_details) {
     try {
       body.worker_personal_details = JSON.parse(body.worker_personal_details);
@@ -3809,9 +3813,13 @@ exports.updateWorkerDataToRequest = catchAsync(async (req, res, next) => {
   if (!updated) {
     return next(new AppError("Worker not found or access denied", 404));
   }
-  const read = await Notification.findByIdAndUpdate(req.query.n_id, {
-    $set: { read: true },
-  });
+  const read = await Notification.findByIdAndUpdate(
+    req.query?.n_id,
+    {
+      $set: { read: true },
+    },
+    { $upsert: true },
+  );
   if (read) {
     const [admin, worker] = await Promise.all([
       adminModel.findOne({ tenantId }).select("_id"),
@@ -3827,6 +3835,9 @@ exports.updateWorkerDataToRequest = catchAsync(async (req, res, next) => {
       type: "INFO",
     };
     await Notification.create(notificationPayload);
+    notificationPayload._id = admin._id;
+    console.log("payload", notificationPayload);
+    io.to(`user_${admin._id}`).emit("notification:new", notificationPayload);
     res.json({
       status: true,
       message: "Worker updated",
@@ -3855,7 +3866,6 @@ exports.getWorkerDetailsById = catchAsync(async (req, res, next) => {
     _id: new mongoose.Types.ObjectId(w_id),
     tenantId,
     isDelete: false,
-    isActive: true,
   };
 
   const worker = await workerModel.aggregate([

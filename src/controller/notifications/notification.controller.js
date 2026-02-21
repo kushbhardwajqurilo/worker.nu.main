@@ -49,6 +49,7 @@ exports.getNotificationToWorker = catchAsync(async (req, res, next) => {
     tenantId,
     userId: worker_id ? worker_id : admin_id,
   };
+
   const notifications = await Notification.find(payload)
     .select("-tenantId -userId -__v")
     .sort({ createdAt: -1 })
@@ -62,6 +63,7 @@ exports.getNotificationToWorker = catchAsync(async (req, res, next) => {
 // <------------ read notification ---------------->
 exports.markAsRead = catchAsync(async (req, res, next) => {
   const { tenantId, worker_id, admin_id } = req;
+  // console.log({ worker_id, admin_id, id: req.id });
   const { id } = req.params;
   if (!tenantId) {
     return new AppError("Tenantid missing", 400);
@@ -85,7 +87,7 @@ exports.markAsRead = catchAsync(async (req, res, next) => {
     userId: worker_id ? worker_id : admin_id,
   });
   if (!mark) {
-    return next(new AppError("notification found", 400));
+    return next(new AppError("notification not found", 400));
   }
   mark.read = true;
   await mark.save();

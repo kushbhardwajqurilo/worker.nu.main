@@ -299,6 +299,7 @@ exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
     return next(new AppError("worker not active", 400));
   }
 
+  const io = req.app.get("io");
   //   check  for leave
   if (leave === "sickness") {
     const sickness = await sicknessModel.findOne({ tenantId, _id: l_id });
@@ -322,12 +323,16 @@ exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
     const notificationPayload = {
       tenantId,
       userId: w_id,
-      title: `Your ${leave} has been Approved`,
-      message: `${duration}`,
+      title: `Leave Request:`,
+      message: `Request From ${duration}: APPROVED`,
       type: "INFO",
     };
 
+    //  Real time notification for worker
+    // console.log("w_id", w_id);
     const ress = await Notification.create(notificationPayload);
+    notificationPayload._id = ress._id;
+    io.to(`user_${w_id}`).emit("notification:new", notificationPayload);
     return sendSuccess(res, "sick leave request approved", {}, 201, true);
   } else if (leave === "holiday") {
     const holidays = await holidayModel.findOne({ tenantId, _id: l_id });
@@ -352,12 +357,14 @@ exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
     const notificationPayload = {
       tenantId,
       userId: w_id,
-      title: `Your ${leave} has been Approved`,
-      message: `${duration}`,
+      title: `Leave Request:`,
+      message: `Request From ${duration}: APPROVED`,
       type: "INFO",
     };
-
     const ress = await Notification.create(notificationPayload);
+    notificationPayload._id = ress._id;
+    io.to(`user_${w_id}`).emit("notification:new", notificationPayload);
+    console.log("w_id", w_id);
     return sendSuccess(res, "holiday request approved", {}, 201, true);
   } else {
     return next(new AppError("Invalid Request Type", 400));
@@ -392,6 +399,7 @@ exports.RejectLeaveRequest = catchAsync(async (req, res, next) => {
     return next(new AppError("worker not active", 400));
   }
 
+  const io = req.app.get("io");
   //   check  for leave
   if (leave === "sickness") {
     const sickness = await sicknessModel.findOne({ tenantId, _id: l_id });
@@ -406,7 +414,9 @@ exports.RejectLeaveRequest = catchAsync(async (req, res, next) => {
     await sickness.save();
 
     return sendSuccess(res, "sick leave request rejected", {}, 201, true);
-  } else if (leave === "holiday") {
+  }
+  if (leave === "holiday") {
+    console.log("reject holiday");
     const holidays = await holidayModel.findOne({ tenantId, _id: l_id });
     if (!holidays) {
       return next(new AppError("holidat request not found", 400));
@@ -420,11 +430,13 @@ exports.RejectLeaveRequest = catchAsync(async (req, res, next) => {
     const notificationPayload = {
       tenantId,
       userId: w_id,
-      title: `Your ${leave} has been Rejected`,
-      message: `${duration}`,
+      title: `Leave Request:`,
+      message: `Request From ${duration}: REJECTED`,
       type: "INFO",
     };
     const ress = await Notification.create(notificationPayload);
+    notificationPayload._id = ress._id;
+    io.to(`user_${w_id}`).emit("notification:new", notificationPayload);
     return sendSuccess(res, "holiday request reject success", {}, 201, true);
   } else {
     return next(new AppError("Invalid Request Type", 400));

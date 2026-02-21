@@ -2,6 +2,7 @@ require("dotenv").config({});
 const cluster = require("cluster");
 const os = require("os");
 const http = require("http");
+const initSocket = require("./src/socket/socket");
 
 const PORT = process.env.PORT || 8002;
 const numCPUs = os.cpus().length;
@@ -38,6 +39,8 @@ if (cluster.isPrimary) {
   const connectDB = require("./src/confing/DB");
   const server = http.createServer(app);
 
+  const io = initSocket(server);
+  app.set("io", io);
   connectDB()
     .then(() => {
       console.log(`DB connected | Worker ${process.pid}`);
