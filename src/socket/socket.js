@@ -10,6 +10,7 @@ const initSocket = (server) => {
       origin: [
         "https://ql3cm80q-3000.inc1.devtunnels.ms",
         "http://localhost:3000",
+        "https://worker.mawz.vercel.app",
       ],
       methods: ["GET", "POST"],
       credentials: true,
