@@ -1593,7 +1593,7 @@ exports.markAsComplete = catchAsync(async (req, res, next) => {
   }
 
   project.is_complete = true;
-  project.completedAt = new Date.now();
+  project.completedAt = new Date();
   await project.save();
 
   return sendSuccess(res, "Mark As Complete Success", {}, 201, true);
