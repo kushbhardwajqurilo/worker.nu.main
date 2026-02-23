@@ -233,7 +233,7 @@ exports.generateForgetPasswordURL = catchAsync(async (req, res, next) => {
   });
 
   // FINAL RESET URL (frontend or backend UI)
-  const fullURL = `https://4frnn03l-8002.inc1.devtunnels.ms/reset-password?q=${resetToken}`;
+  const fullURL = `https://api.project1222.com/reset-password?q=${resetToken}`;
   const sent = await SentMail(
     isEmail.email,
     "Reset Password",
