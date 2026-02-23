@@ -176,7 +176,6 @@ const keepSameDateUTC = require("../../utils/keepSameDate");
 
 exports.createWorkerHours = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
-  console.log(req.role);
   const files = req.files || []; // 👈 .any() → always array
 
   /* ---------- FILE LIMIT CHECK ---------- */
