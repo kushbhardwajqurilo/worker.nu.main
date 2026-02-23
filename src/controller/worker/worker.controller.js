@@ -3513,13 +3513,33 @@ exports.requestInformation = catchAsync(async (req, res, next) => {
   }
 
   /* ---------- SEND NOTIFICATIONS ---------- */
+  // if (notificationPayload.length) {
+  //   const noti = await Notification.insertMany(notificationPayload);
+  //   for (id of workerId) {
+  //     const payload = notificationPayload[0];
+  //     payload._id = id;
+  //     io.to(`user_${id}`).emit("notification:new", payload);
+  //   }
+  // }
+
+  /* ---------- SEND NOTIFICATIONS ---------- */
   if (notificationPayload.length) {
-    await Notification.insertMany(notificationPayload);
-  }
-  for (id of workerId) {
-    const payload = notificationPayload[0];
-    payload._id = id;
-    io.to(`user_${id}`).emit("notification:new", payload);
+    const noti = await Notification.insertMany(notificationPayload);
+
+    if (noti && noti.length) {
+      for (const notification of noti) {
+        io.to(`user_${notification.userId}`).emit("notification:new", {
+          _id: notification._id, // notification id
+          tenantId: notification.tenantId,
+          title: notification.title,
+          message: notification.message,
+          userId: notification.userId,
+          type: notification.type,
+          redirectUrl: notification.redirectUrl,
+          createdAt: notification.createdAt,
+        });
+      }
+    }
   }
   return sendSuccess(
     res,
