@@ -21,7 +21,7 @@ const generateAcessToken = (data) => {
       tenant: data.tenant,
     },
     process.env.ACCESS_TOKEN_KEY,
-    { expiresIn: "30min" },
+    { expiresIn: "30m" },
   );
 };
 
