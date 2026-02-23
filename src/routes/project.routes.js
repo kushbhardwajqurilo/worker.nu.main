@@ -13,6 +13,7 @@ const {
   projectWorkerList,
   getProjectFolderFile,
   getProjectMinmumWords,
+  activeProjectController,
 } = require("../controller/project/project.controller");
 const {
   authMiddeware,
@@ -32,7 +33,12 @@ projectRouter.post(
   uploadDocuments,
   addProjectController,
 ); // add project route
-
+projectRouter.patch(
+  "/mark-active",
+  authMiddeware,
+  accessMiddleware("admin"),
+  activeProjectController,
+);
 projectRouter.post(
   "/get-projects",
   authMiddeware,
@@ -116,4 +122,5 @@ projectRouter.get(
   accessMiddleware("worker", "admin"),
   getProjectMinmumWords,
 );
+
 module.exports = projectRouter;

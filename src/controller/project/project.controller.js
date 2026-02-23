@@ -1736,3 +1736,30 @@ exports.getProjectMinmumWords = catchAsync(async (req, res, next) => {
   );
 });
 // <--------- project minimum amount words get end ---------->
+
+// active project
+
+exports.activeProjectController = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  const { p_id } = req.query;
+  if (!tenantId) {
+    return next(new AppError("Tenant Missing", 400));
+  }
+  if (!isValidCustomUUID(tenantId)) {
+    return next(new AppError("Invalid Tenant Id", 400));
+  }
+  if (!p_id) {
+    return next(new AppError("Project Identification Missing", 400));
+  }
+  if (!mongoose.Types.ObjectId.isValid(p_id)) {
+    return next(new AppError("Invalid Project Identity", 400));
+  }
+  const is_project = await projectMode.findOne({ tenantId, _id: p_id });
+  if (!is_project) {
+    return next(new AppError("Project Not Found", 400));
+  }
+  await is_project.updateOne({ $set: { is_complete: false } });
+  return sendSuccess(res, "Project Activated", {}, 200, true);
+});
+
+// active project end
