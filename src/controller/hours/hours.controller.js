@@ -173,6 +173,7 @@ const calculateEvaluation = require("../../utils/calculateEvaluation");
 const getWeeksSinceCreated = require("../../utils/calculateWeekNo");
 const getWeeksCreated = require("../../utils/week");
 const keepSameDateUTC = require("../../utils/keepSameDate");
+const { workerModel } = require("../../models/workerModel");
 
 exports.createWorkerHours = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
@@ -216,6 +217,7 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
   if (parsedProject.project_date) {
     parsedProject.project_date = keepSameDateUTC(parsedProject.project_date);
   }
+  const parsedReason = lateReason === "string" ? safeParse(lateReason) : "";
   const parsedStartHours = safeParse(start_working_hours);
   const parsedFinishHours = safeParse(finish_hours);
   const parseComments = safeParse(comments);
@@ -238,6 +240,19 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
     return next(new AppError("Comments required", 400));
   }
 
+  if (parsedWorkerId) {
+    const isValidWorker = await workerModel
+      .findById(parsedWorkerId)
+      .select("isDelete");
+    if (isValidWorker.isDelete) {
+      return next(
+        new AppError(
+          "You cannot add hours because your account has been deleted.",
+          400,
+        ),
+      );
+    }
+  }
   /* ---------- PROJECT CHECK ---------- */
   const projectData = await projectMode
     .findById(parsedProject.projectId)
@@ -262,7 +277,7 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
     break_time: break_time === "undefined" || "" ? 0 : Number(breakTime),
     comments: parseComments,
     workerId: parsedWorkerId ? parsedWorkerId : workerId,
-    lateReason: safeParse(lateReason),
+    lateReason: parsedReason,
     createdBy: req.role,
   };
 
@@ -3983,18 +3998,22 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
     .lean();
 
   /* ---------- HELPERS ---------- */
-  const formatHours = (decimalHours = 0) => {
-    const hours = Math.floor(decimalHours);
-    const minutes = Math.round((decimalHours - hours) * 60);
+  const formatHours = (decimalHours = 0, break_time = 0) => {
+    // convert to total minutes
+    const totalMinutes = Math.round(decimalHours * 60) - Math.round(break_time);
+
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    const decimal = (totalMinutes / 60).toFixed(2);
 
     return {
-      decimal: decimalHours.toFixed(2),
+      decimal,
       hours,
       minutes,
-      label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
+      label: `${decimal} h (${hours}h ${minutes}min)`,
     };
   };
-
   const formatWeekRangeLabel = (startDate, endDate) => {
     const options = { day: "numeric", month: "short" };
     return `${new Date(startDate).toLocaleDateString(
@@ -4033,7 +4052,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
           workerMap.set(workerKey, {
             latest: item,
             total_hours_sum: Number(item.total_hours || 0),
-
+            breakTime: Number(item.break_time || 0),
             /* ✅ FIX 2: store lateResult */
             lateResult: lateResult,
           });
@@ -4041,7 +4060,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
           const existing = workerMap.get(workerKey);
 
           existing.total_hours_sum += Number(item.total_hours || 0);
-
+          existing.breakTime += Number(item.break_time);
           // update latest
           if (
             new Date(item.project.project_date) >
@@ -4056,7 +4075,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
       }
     });
 
-    workerMap.forEach(({ latest, total_hours_sum, lateResult }) => {
+    workerMap.forEach(({ latest, total_hours_sum, lateResult, breakTime }) => {
       transformedData.push({
         _id: latest._id,
         tenantId: latest.tenantId,
@@ -4083,12 +4102,12 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
             }
           : null,
 
-        total_hours: formatHours(total_hours_sum),
+        total_hours: formatHours(total_hours_sum, breakTime),
         status: latest.status,
         createdAt: latest.createdAt,
         createdBy: latest.createdBy,
         updatedAt: latest.updatedAt,
-        break_time: latest.break_time,
+        break_time: breakTime,
         comments: latest.comments,
         lateReason: latest.lateReason,
         is_late: lateResult?.isLate,
@@ -4267,14 +4286,21 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
     ]);
 
     /* ---------- HOURS FORMATTER ---------- */
-    const formatHours = (decimalHours = 0) => {
-      const hours = Math.floor(decimalHours);
-      const minutes = Math.round((decimalHours - hours) * 60);
+    const formatHours = (decimalHours = 0, break_time = 0) => {
+      // convert to total minutes
+      const totalMinutes =
+        Math.round(decimalHours * 60) - Math.round(break_time);
+
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+
+      const decimal = (totalMinutes / 60).toFixed(2);
+
       return {
-        decimal: decimalHours.toFixed(2),
+        decimal,
         hours,
         minutes,
-        label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
+        label: `${decimal} h (${hours}h ${minutes}min)`,
       };
     };
 
@@ -4326,7 +4352,7 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
         comments: obj.comments,
         image: obj.images,
         createdBy: obj.createdBy || "",
-        total_hours: formatHours(obj.total_hours),
+        total_hours: formatHours(obj.total_hours, obj.break_time),
         weekRange: { startDate, endDate },
         lateReason: obj.lateReason,
         is_late: lateResult.isLate,

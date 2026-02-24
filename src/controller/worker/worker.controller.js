@@ -2651,7 +2651,7 @@ exports.workerSignature = catchAsync(async (req, res, next) => {
   });
 
   if (!worker) {
-    return next(new AppError("Worker not found", 404));
+    return next(new AppError("Worker Has Been Deleted", 404));
   }
 
   if (!worker.isActive) {
@@ -2809,7 +2809,7 @@ exports.isSignWorker = catchAsync(async (req, res, next) => {
   }
   const worker = await workerModel
     .findOne({ tenantId, _id: worker_id })
-    .select("isSign")
+    .select("isSign isDelete")
     .lean();
   if (!worker) {
     return nedt(new AppError("Invaolid Worker", 400));
