@@ -2454,7 +2454,7 @@ exports.getAllProjectsToWorkerAddController = catchAsync(
 exports.requestLeave = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
   const { leaveType, reason, range, workerIds: bodyWorkerIds } = req.body;
-
+  console.log("range", range);
   if (!tenantId) {
     return next(new AppError("tenant-id missing", 400));
   }

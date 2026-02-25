@@ -2032,7 +2032,31 @@ exports.addminDashboardStats = catchAsync(async (req, res, next) => {
           ],
 
           workers: [
+            // 1. break workers array
             { $unwind: "$project_workers.workers" },
+
+            // 2. join worker collection
+            {
+              $lookup: {
+                from: "workers", // your worker collection name
+                localField: "project_workers.workers",
+                foreignField: "_id",
+                as: "workerData",
+              },
+            },
+
+            // 3. convert array → object
+            { $unwind: "$workerData" },
+
+            // 4. filter only active workers
+            {
+              $match: {
+                "workerData.isActive": true,
+                "workerData.isDelete": false,
+              },
+            },
+
+            // 5. group unique workers
             {
               $group: {
                 _id: {
@@ -2046,9 +2070,7 @@ exports.addminDashboardStats = catchAsync(async (req, res, next) => {
                           {
                             $and: [
                               { $eq: ["$is_complete", true] },
-                              {
-                                $gte: ["$completedAt", startOfLastMonth],
-                              },
+                              { $gte: ["$completedAt", startOfLastMonth] },
                               { $lt: ["$completedAt", endOfLastMonth] },
                             ],
                           },
@@ -2061,6 +2083,15 @@ exports.addminDashboardStats = catchAsync(async (req, res, next) => {
                 },
               },
             },
+
+            // 6. remove null
+            {
+              $match: {
+                "_id.type": { $ne: null },
+              },
+            },
+
+            // 7. count
             {
               $group: {
                 _id: "$_id.type",
