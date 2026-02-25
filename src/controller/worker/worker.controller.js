@@ -2526,7 +2526,7 @@ exports.requestLeave = catchAsync(async (req, res, next) => {
     endDate = keepSameDateUTC(today, true);
     totalDays = 1;
   }
-  console.log({ startDate, endDate });
+  console.log("convert date", { startDate, endDate });
   /* ---------- WORKER CHECK ---------- */
 
   const workers = await workerModel
