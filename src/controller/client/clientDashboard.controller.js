@@ -1188,11 +1188,12 @@ exports.getAllHoursOfWorkerToClientController = catchAsync(
             workerMap.set(workerKey, {
               latest: item,
               total_hours_sum: Number(item.total_hours || 0),
+              breakTime: Number(item.break_time || 0),
             });
           } else {
             const existing = workerMap.get(workerKey);
             existing.total_hours_sum += Number(item.total_hours || 0);
-
+            existing.breakTime += Number(item.break_time);
             if (
               new Date(item.project.project_date) >
               new Date(existing.latest.project.project_date)
@@ -1203,7 +1204,7 @@ exports.getAllHoursOfWorkerToClientController = catchAsync(
         }
       });
 
-      workerMap.forEach(({ latest, total_hours_sum }) => {
+      workerMap.forEach(({ latest, total_hours_sum, breakTime }) => {
         transformedData.push({
           _id: latest._id,
           tenantId: latest.tenantId,
@@ -1236,7 +1237,7 @@ exports.getAllHoursOfWorkerToClientController = catchAsync(
           status: latest.status,
           createdAt: latest.createdAt,
           updatedAt: latest.updatedAt,
-
+          break_time: breakTime,
           weekRange: {
             startDate: week.start.toLocaleDateString("en-IN"),
             endDate: week.end.toLocaleDateString("en-IN"),

@@ -1629,20 +1629,31 @@ exports.getProjectEconomy = catchAsync(async (req, res, next) => {
       .lean(),
     hoursModel.find({ tenantId, "project.projectId": p_id }).lean(),
   ]);
-
   const total_hours = hours.reduce((sum, item) => sum + item.total_hours, 0);
+  const approvedHours = hours.reduce(
+    (sum, item) => sum + (item.status === "approved" ? item.total_hours : 0),
+    0,
+  );
+  const pending_hours = hours.reduce(
+    (sum, item) =>
+      sum +
+      (item.status === "pending" || item.status === "review"
+        ? item.total_hours
+        : 0),
+    0,
+  );
   const formatedData = {
     project: {
       projectName: project_economy.project_details.project_name,
       projectLocation: project_economy.project_details.project_location_address,
       clientName:
-        project_economy.client_details.client.client_details.client_name,
+        project_economy?.client_details?.client?.client_details?.client_name,
       status: true,
     },
     client_and_hours: {
-      total_hours,
-      notApproved: null,
-      Approved: null,
+      total_hours: `${total_hours}h`,
+      notApproved: pending_hours ? `${pending_hours}h` : null,
+      Approved: `${approvedHours}h`,
     },
   };
 

@@ -4011,7 +4011,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
       decimal,
       hours,
       minutes,
-      label: `${decimal} h (${hours}h ${minutes}min)`,
+      label: `${decimalHours} h (${hours}h ${minutes}min)`,
     };
   };
   const formatWeekRangeLabel = (startDate, endDate) => {
@@ -4287,12 +4287,11 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
 
     /* ---------- HOURS FORMATTER ---------- */
     const formatHours = (decimalHours = 0, break_time = 0) => {
-      // convert to total minutes
-      const totalMinutes =
-        Math.round(decimalHours * 60) - Math.round(break_time);
+      // don't round here
+      const totalMinutes = decimalHours * 60 - break_time;
 
       const hours = Math.floor(totalMinutes / 60);
-      const minutes = totalMinutes % 60;
+      const minutes = Math.round(totalMinutes % 60);
 
       const decimal = (totalMinutes / 60).toFixed(2);
 
@@ -4300,7 +4299,7 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
         decimal,
         hours,
         minutes,
-        label: `${decimal} h (${hours}h ${minutes}min)`,
+        label: `${decimalHours} h (${hours}h ${minutes}min)`,
       };
     };
 

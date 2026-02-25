@@ -71,8 +71,12 @@ exports.getHolidayRequest = catchAsync(async (req, res, next) => {
     .limit(limit)
     .populate({
       path: "workerId",
+      match: {
+        isActive: true,
+        isDelete: false,
+      },
       select:
-        "-worker_personal_details.phone -project -language -worker_holiday.sickness_holidays -worker_holiday.sickness_per_month -worker_holiday.sickness_taken -worker_economical_data -isDelete -isActive -dashboardUrl -urlVisibleToAdmin -signature -isSign -urlAdminExpireAt -personal_information.bank_details -personal_information.address_details -personal_information.close_contact -personal_information.clothing_sizes -personal_information.documents.drivers_license -personal_information.documents.passport -personal_information.documents.national_id_card -personal_information.documents.worker_work_id -personal_information.documents.other_files -createdAt -updatedAt -__v -personal_information.email -personal_information.date_of_birth",
+        "-worker_personal_details.phone -project -language -worker_holiday.sickness_holidays -worker_holiday.sickness_per_month -worker_holiday.sickness_taken -worker_economical_data  -dashboardUrl -urlVisibleToAdmin -signature -isSign -urlAdminExpireAt -personal_information.bank_details -personal_information.address_details -personal_information.close_contact -personal_information.clothing_sizes -personal_information.documents.drivers_license -personal_information.documents.passport -personal_information.documents.national_id_card -personal_information.documents.worker_work_id -personal_information.documents.other_files -createdAt -updatedAt -__v -personal_information.email -personal_information.date_of_birth",
       populate: {
         path: "worker_position",
         model: "worker_position",
@@ -109,7 +113,7 @@ exports.getHolidayRequest = catchAsync(async (req, res, next) => {
       startDate: item.duration.startDate,
       endDate: item.duration.endDate,
       totalDays: item.duration.totalDays,
-      remaining_days: item.workerId.worker_holiday.remaining_holidays,
+      remaining_days: item.workerId?.worker_holiday?.remaining_holidays,
     },
 
     worker: {
@@ -118,7 +122,9 @@ exports.getHolidayRequest = catchAsync(async (req, res, next) => {
       name: `${item.workerId.worker_personal_details?.firstName || ""} ${
         item.workerId.worker_personal_details?.lastName || ""
       }`.trim(),
+
       position: item.workerId.worker_position?.map((p) => p.position) || [],
+
       profile_picture:
         item.workerId.personal_information?.documents?.profile_picture || null,
     },
@@ -200,8 +206,12 @@ exports.getSicknessRequest = catchAsync(async (req, res, next) => {
     .limit(limit)
     .populate({
       path: "workerId",
+      match: {
+        isActive: true,
+        isDelete: false,
+      },
       select:
-        "-worker_personal_details.phone -project -language -worker_holiday.remaining_holidays -worker_holiday.holidays_per_month -worker_holiday.holidays_taken -worker_economical_data -isDelete -isActive -dashboardUrl -urlVisibleToAdmin -signature -isSign -urlAdminExpireAt -personal_information.bank_details -personal_information.address_details -personal_information.close_contact -personal_information.clothing_sizes -personal_information.documents.drivers_license -personal_information.documents.passport -personal_information.documents.national_id_card -personal_information.documents.worker_work_id -personal_information.documents.other_files -createdAt -updatedAt -__v -personal_information.email -personal_information.date_of_birth",
+        "-worker_personal_details.phone -project -language -worker_holiday.remaining_holidays -worker_holiday.holidays_per_month -worker_holiday.holidays_taken -worker_economical_data  -dashboardUrl -urlVisibleToAdmin -signature -isSign -urlAdminExpireAt -personal_information.bank_details -personal_information.address_details -personal_information.close_contact -personal_information.clothing_sizes -personal_information.documents.drivers_license -personal_information.documents.passport -personal_information.documents.national_id_card -personal_information.documents.worker_work_id -personal_information.documents.other_files -createdAt -updatedAt -__v -personal_information.email -personal_information.date_of_birth",
       populate: {
         path: "worker_position",
         model: "worker_position",
@@ -225,7 +235,7 @@ exports.getSicknessRequest = catchAsync(async (req, res, next) => {
       true,
     );
   }
-
+  // console.log("result", result);
   // ================= STRUCTURE DATA =================
   const structuredData = result.map((item) => ({
     sickness_id: item._id,
@@ -238,12 +248,12 @@ exports.getSicknessRequest = catchAsync(async (req, res, next) => {
       startDate: item.duration?.startDate || null,
       endDate: item.duration?.endDate || null,
       totalDays: item.duration?.totalDays || 0,
-      remaining_days: item.workerId.worker_holiday.remaining_sickness,
+      remaining_days: item.workerId?.worker_holiday?.remaining_sickness,
     },
 
     worker: {
-      worker_id: item.workerId._id,
-      worker_code: item.workerId.id,
+      worker_id: item?.workerId?._id,
+      worker_code: item?.workerId?.id,
       name: `${item.workerId.worker_personal_details?.firstName || ""} ${
         item.workerId.worker_personal_details?.lastName || ""
       }`.trim(),
@@ -315,10 +325,10 @@ exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
 
     // days deduction
     worker.worker_holiday.remaining_sickness =
-      worker.worker_holiday.remaining_sickness - 1;
+      worker.worker_holiday.remaining_sickness - sickness.duration.totalDays;
 
     worker.worker_holiday.sickness_taken =
-      worker.worker_holiday.sickness_taken + 1;
+      worker.worker_holiday.sickness_taken + sickness.duration.totalDays;
     await worker.save();
     const notificationPayload = {
       tenantId,
@@ -348,10 +358,10 @@ exports.approveLeaveRequest = catchAsync(async (req, res, next) => {
 
     // days deduction
     worker.worker_holiday.remaining_holidays =
-      worker.worker_holiday.remaining_holidays - 1;
+      worker.worker_holiday.remaining_holidays - holidays?.duration.totalDays;
 
     worker.worker_holiday.holidays_taken =
-      worker.worker_holiday.holidays_taken + 1;
+      worker.worker_holiday.holidays_taken + holidays?.duration.totalDays;
 
     await worker.save();
     const notificationPayload = {
@@ -423,6 +433,15 @@ exports.RejectLeaveRequest = catchAsync(async (req, res, next) => {
     }
     if (holidays.status === "rejected") {
       return next(new AppError("holiday request already reject", 400));
+    }
+    if (holidays.status === "approved") {
+      worker.worker_holiday.remaining_holidays =
+        worker.worker_holiday.remaining_holidays + holidays?.duration.totalDays;
+
+      worker.worker_holiday.holidays_taken =
+        worker.worker_holiday.holidays_taken - holidays?.duration.totalDays;
+
+      await worker.save();
     }
     holidays.status = "rejected";
     holidays.approvedAt = Date.now();
