@@ -2,12 +2,19 @@ function keepSameDateUTC(dateInput, endOfDay = false) {
   if (!dateInput) return null;
 
   const d = new Date(dateInput);
+
   if (isNaN(d)) return null;
 
-  // use LOCAL getters because frontend date is LOCAL IST
-  const year = d.getFullYear();
-  const month = d.getMonth();
-  const day = d.getDate();
+  // extract using toLocaleString in Asia/Kolkata
+  const parts = d
+    .toLocaleDateString("en-CA", {
+      timeZone: "Asia/Kolkata",
+    })
+    .split("-");
+
+  const year = Number(parts[0]);
+  const month = Number(parts[1]) - 1;
+  const day = Number(parts[2]);
 
   if (endOfDay) {
     return new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
@@ -15,5 +22,4 @@ function keepSameDateUTC(dateInput, endOfDay = false) {
 
   return new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
 }
-
 module.exports = keepSameDateUTC;
