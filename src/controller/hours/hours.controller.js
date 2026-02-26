@@ -174,6 +174,7 @@ const getWeeksSinceCreated = require("../../utils/calculateWeekNo");
 const getWeeksCreated = require("../../utils/week");
 const keepSameDateUTC = require("../../utils/keepSameDate");
 const { workerModel } = require("../../models/workerModel");
+const getWeekNumberFromWeekStart = require("../../utils/calenderWeekNumber");
 
 exports.createWorkerHours = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
@@ -4110,7 +4111,7 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
       transformedData.push({
         _id: latest._id,
         tenantId: latest.tenantId,
-        weekNumber: getWeeksSinceCreated(latest.workerId.createdAt, week.start),
+        weekNumber: getWeekNumberFromWeekStart(week.start),
         worker: latest.workerId
           ? {
               _id: latest.workerId._id,
@@ -4325,7 +4326,6 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
       const minutes = Math.round(totalMinutes % 60);
 
       const decimal = (totalMinutes / 60).toFixed(2);
-
       return {
         decimal,
         hours,
@@ -4377,7 +4377,7 @@ exports.getSingleWorkerWeeklyHoursController = catchAsync(
         finish_hours: obj.finish_hours,
         break_time: obj.break_time,
         day_off: obj.day_off,
-        weekNumber: getWeeksSinceCreated(obj.createdAt, weekStart),
+        weekNumber: getWeekNumberFromWeekStart(weekStart),
         status: obj.status,
         comments: obj.comments,
         image: obj.images,

@@ -11,6 +11,7 @@ const hoursModel = require("../../models/hoursModel");
 const calculateLateHoursByDate = require("../../utils/weekLateCount");
 const calculateLateByProjectEnd = require("../../utils/calculateLate");
 const getWeeksSinceCreated = require("../../utils/calculateWeekNo");
+const getWeekNumberFromWeekStart = require("../../utils/calenderWeekNumber");
 // <--------- Single client own details  ----------->
 
 exports.getClientInformation = catchAsync(async (req, res, next) => {
@@ -1144,18 +1145,23 @@ exports.getAllHoursOfWorkerToClientController = catchAsync(
     /* ======================= HELPERS ========================= */
     /* ========================================================= */
 
-    const formatHours = (decimalHours = 0) => {
-      const hours = Math.floor(decimalHours);
-      const minutes = Math.round((decimalHours - hours) * 60);
+    const formatHours = (decimalHours = 0, break_time = 0) => {
+      // convert to total minutes
+      const totalMinutes =
+        Math.round(decimalHours * 60) - Math.round(break_time);
+
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+
+      const decimal = (totalMinutes / 60).toFixed(2);
 
       return {
-        decimal: decimalHours.toFixed(2),
+        decimal,
         hours,
         minutes,
-        label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
+        label: `${decimalHours} h (${hours}h ${minutes}min)`,
       };
     };
-
     const formatWeekRangeLabel = (start, end) => {
       return `${start.toLocaleDateString("en-IN", {
         day: "numeric",
@@ -1209,10 +1215,7 @@ exports.getAllHoursOfWorkerToClientController = catchAsync(
           _id: latest._id,
           tenantId: latest.tenantId,
 
-          weekNumber: getWeeksSinceCreated(
-            latest.workerId.createdAt,
-            week.start,
-          ),
+          weekNumber: getWeekNumberFromWeekStart(week.start),
 
           worker: {
             _id: latest.workerId._id,
@@ -1229,11 +1232,11 @@ exports.getAllHoursOfWorkerToClientController = catchAsync(
                 _id: latest.project.projectId._id,
                 project_name:
                   latest.project.projectId.project_details?.project_name || "",
-                project_date: latest.project.project_date,
+                project_date: latest?.project?.project_date,
               }
             : null,
 
-          total_hours: formatHours(total_hours_sum),
+          total_hours: formatHours(total_hours_sum, breakTime),
           status: latest.status,
           createdAt: latest.createdAt,
           updatedAt: latest.updatedAt,
@@ -1689,14 +1692,21 @@ exports.getSingleWorkerWeeklyHoursToClientController = catchAsync(
     ]);
 
     /* ---------- HOURS FORMATTER ---------- */
-    const formatHours = (decimalHours = 0) => {
-      const hours = Math.floor(decimalHours);
-      const minutes = Math.round((decimalHours - hours) * 60);
+    const formatHours = (decimalHours = 0, break_time = 0) => {
+      // convert to total minutes
+      const totalMinutes =
+        Math.round(decimalHours * 60) - Math.round(break_time);
+
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+
+      const decimal = (totalMinutes / 60).toFixed(2);
+
       return {
-        decimal: decimalHours.toFixed(2),
+        decimal,
         hours,
         minutes,
-        label: `${decimalHours.toFixed(2)} h (${hours}h ${minutes}min)`,
+        label: `${decimalHours} h (${hours}h ${minutes}min)`,
       };
     };
 
@@ -1748,7 +1758,7 @@ exports.getSingleWorkerWeeklyHoursToClientController = catchAsync(
         finish_hours: obj.finish_hours,
         break_time: obj.break_time,
         day_off: obj.day_off,
-        weekNumber: obj.weekNumber,
+        weekNumber: getWeekNumberFromWeekStart(weekStart),
         status: obj.status,
         comments: obj.comments,
         image: obj.images,

@@ -3416,6 +3416,7 @@ exports.LastAndThisWeekTotalHours = catchAsync(async (req, res, next) => {
         $match: {
           tenantId,
           workerId: new mongoose.Types.ObjectId(worker_id),
+          status: "approved",
           createdAt: {
             $gte: thisWeek.start,
             $lte: thisWeek.end,
@@ -3426,6 +3427,7 @@ exports.LastAndThisWeekTotalHours = catchAsync(async (req, res, next) => {
         $group: {
           _id: null,
           totalHours: { $sum: "$total_hours" },
+          breakTime: { $sum: "$break_time" },
         },
       },
     ]),
@@ -3444,16 +3446,37 @@ exports.LastAndThisWeekTotalHours = catchAsync(async (req, res, next) => {
         $group: {
           _id: null,
           totalHours: { $sum: "$total_hours" },
+          breakTime: { $sum: "$break_time" },
         },
       },
     ]),
   ]);
+  const formatHours = (decimalHours = 0, break_time = 0) => {
+    // convert to total minutes
+    const totalMinutes = Math.round(decimalHours * 60) - Math.round(break_time);
 
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    const decimal = (totalMinutes / 60).toFixed(2);
+
+    return {
+      decimal,
+      hours,
+      minutes,
+      label: `${decimalHours} h (${hours}h ${minutes}min)`,
+    };
+  };
+  const hours = formatHours(
+    thisWeekResult[0].totalHours,
+    thisWeekResult[0].breakTime,
+  );
+  console.log("hoours", hours);
   /* ---------- RESPONSE ---------- */
   res.status(200).json({
     status: true,
     data: {
-      thisWeekHours: thisWeekResult[0]?.totalHours || 0,
+      thisWeekHours: `${hours.hours}h ${hours.minutes}min`,
       lastWeekHours: lastWeekResult[0]?.totalHours || 0,
     },
   });
