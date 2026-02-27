@@ -3468,15 +3468,15 @@ exports.LastAndThisWeekTotalHours = catchAsync(async (req, res, next) => {
     };
   };
   const hours = formatHours(
-    thisWeekResult[0].totalHours,
-    thisWeekResult[0].breakTime,
+    thisWeekResult[0]?.totalHours,
+    thisWeekResult[0]?.breakTime,
   );
   console.log("hoours", hours);
   /* ---------- RESPONSE ---------- */
   res.status(200).json({
     status: true,
     data: {
-      thisWeekHours: `${hours.hours}h ${hours.minutes}min`,
+      thisWeekHours: `${hours?.hours}h ${hours?.minutes}min`,
       lastWeekHours: lastWeekResult[0]?.totalHours || 0,
     },
   });
