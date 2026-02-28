@@ -5,7 +5,7 @@ const adminModel = require("../../models/authmodel/adminModel");
 const { getIo } = require("../../socket/socket");
 
 const startReminder = cron.schedule(
-  "13 12 * * *",
+  "*/5 * * * *",
   async () => {
     try {
       // DB READY CHECK
@@ -15,7 +15,6 @@ const startReminder = cron.schedule(
         return;
       }
       console.log("🔔 Reminder cron started");
-
       const today = new Date().toISOString().split("T")[0];
       const reminders = await WorkerReminder.find({ isSent: false });
 
@@ -24,7 +23,7 @@ const startReminder = cron.schedule(
         return;
       }
       for (const reminder of reminders) {
-        const reminderDate = new Date(reminder.date)
+        const reminderDate = new Date(reminder?.date)
           .toISOString()
           .split("T")[0];
         if (reminderDate !== today) {
@@ -32,7 +31,6 @@ const startReminder = cron.schedule(
         }
         //  check if reminder for manager
         if (reminder.manager !== null && reminder.reminderFor === "manager") {
-          console.log("reminder", reminder);
           const manager = await adminModel.findOne({
             tenantId: reminder.tenantId,
           });
@@ -40,7 +38,7 @@ const startReminder = cron.schedule(
             return;
           }
           const noti = await Notification.create({
-            tenantId: reminder.tenantId,
+            tenantId: reminder?.tenantId,
             userId: manager?._id,
             title: reminder.title,
             message: reminder.note,
@@ -78,27 +76,55 @@ const startReminder = cron.schedule(
         // if reminder for both worker and manager
 
         if (reminder.reminderFor === "both") {
-          console.log("running");
+          // Workers
           for (const ids of reminder.workerId) {
-            console.log(ids);
-            await Notification.create({
+            const workerNotification = await Notification.create({
               tenantId: reminder.tenantId,
               userId: ids,
               title: reminder.title,
               message: reminder.note,
             });
+
+            io.to(`user_${ids}`).emit("notification:new", {
+              _id: workerNotification._id,
+              tenantId: workerNotification.tenantId,
+              title: workerNotification.title,
+              message: workerNotification.message,
+              userId: workerNotification.userId,
+              type: "SUCCESS",
+            });
           }
-          await Notification.create({
-            userId: reminder.manager,
-            title: reminder.title,
-            message: reminder.note,
+
+          // Manager
+          const manager = await adminModel.findOne({
+            tenantId: reminder.tenantId,
           });
 
+          if (manager) {
+            const managerNotification = await Notification.create({
+              tenantId: reminder.tenantId,
+              userId: manager._id,
+              title: reminder.title,
+              message: reminder.note,
+            });
+
+            io.to(`user_${manager._id}`).emit("notification:new", {
+              _id: managerNotification._id,
+              tenantId: managerNotification.tenantId,
+              title: managerNotification.title,
+              message: managerNotification.message,
+              userId: managerNotification.userId,
+              type: "SUCCESS",
+            });
+          }
+
+          // ✅ Finally mark sent
           reminder.isSent = true;
           await reminder.save();
         }
       }
     } catch (error) {
+      console.log(error);
       console.error("❌ Reminder cron error:", error.message);
     }
   },

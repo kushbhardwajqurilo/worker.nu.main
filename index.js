@@ -16,9 +16,6 @@ if (cluster.isPrimary) {
   connectDB()
     .then(() => {
       console.log("DB connected | PRIMARY");
-
-      const startReminder = require("./src/confing/crons/projectReminder");
-      startReminder.start(); // agar scheduled:false hai
     })
     .catch((err) => {
       console.error("Primary DB connection failed:", err.message);
@@ -40,6 +37,8 @@ if (cluster.isPrimary) {
   const server = http.createServer(app);
 
   const io = initSocket(server);
+  const startReminder = require("./src/confing/crons/projectReminder");
+  startReminder.start(); // agar scheduled:false hai
   app.set("io", io);
   connectDB()
     .then(() => {
