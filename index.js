@@ -37,8 +37,8 @@ if (cluster.isPrimary) {
   const server = http.createServer(app);
 
   const io = initSocket(server);
-  const startReminder = require("./src/confing/crons/projectReminder");
-  startReminder.start(); // agar scheduled:false hai
+  // const startReminder = require("./src/confing/crons/projectReminder");
+  // startReminder.start(); // agar scheduled:false hai
   app.set("io", io);
   connectDB()
     .then(() => {
