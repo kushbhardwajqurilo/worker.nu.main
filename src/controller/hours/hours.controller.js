@@ -2329,27 +2329,28 @@ exports.checkSubmitHoursOnDateForClientWorker = catchAsync(
     }
     /* 🔥 DATE FIX START */
     const inputDate = new Date(date);
-    // start of day (IST)
-    const startOfDay = new Date(
-      inputDate.getFullYear(),
-      inputDate.getMonth(),
-      inputDate.getDate(),
-    );
-    // end of day (IST)
-    const endOfDay = new Date(
-      inputDate.getFullYear(),
-      inputDate.getMonth(),
-      inputDate.getDate() + 1,
-    );
-    /* 🔥 DATE FIX END */
+    const sameDate = keepSameDateUTC(inputDate);
 
+    // // start of day (IST)
+    // const startOfDay = new Date(
+    //   inputDate.getFullYear(),
+    //   inputDate.getMonth(),
+    //   inputDate.getDate() + 1,
+    // );
+    // // end of day (IST)
+    // const endOfDay = new Date(
+    //   inputDate.getFullYear(),
+    //   inputDate.getMonth(),
+    //   inputDate.getDate() + 1,
+    // );
+    // /* 🔥 DATE FIX END */
+    // console.log({ startOfDay, endOfDay });
     const payload = {
       tenantId,
       workerId: worker_id,
       "project.projectId": new mongoose.Types.ObjectId(project_id),
       "project.project_date": {
-        $gte: startOfDay,
-        $lt: endOfDay,
+        $eq: sameDate,
       },
     };
 

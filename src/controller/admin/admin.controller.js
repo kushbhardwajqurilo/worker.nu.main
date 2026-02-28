@@ -820,13 +820,13 @@ exports.editReminder = catchAsync(async (req, res, next) => {
   /* ---------- STRICT VALIDATION (SAME AS SET) ---------- */
 
   // manager → nothing allowed
-  if (finalReminderFor === "manager") {
-    if (hasWorker || hasProject) {
-      return next(
-        new AppError("Manager reminder should not have worker or project", 400),
-      );
-    }
-  }
+  // if (finalReminderFor === "manager") {
+  //   if (hasWorker || hasProject) {
+  //     return next(
+  //       new AppError("Manager reminder should not have worker or project", 400),
+  //     );
+  //   }
+  // }
 
   // worker → worker required, project not allowed
   if (finalReminderFor === "worker") {
@@ -865,7 +865,10 @@ exports.editReminder = catchAsync(async (req, res, next) => {
 
   updatePayload.workerId = workers;
   updatePayload.project = projects;
-
+  if (finalReminderFor === "manager") {
+    updatePayload.workerId = [];
+    updatePayload.project = [];
+  }
   const updatedReminder = await WorkerReminder.findOneAndUpdate(
     { _id: r_id, tenantId },
     { $set: updatePayload },

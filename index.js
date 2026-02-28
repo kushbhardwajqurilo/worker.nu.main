@@ -2,7 +2,7 @@ require("dotenv").config({});
 const cluster = require("cluster");
 const os = require("os");
 const http = require("http");
-const initSocket = require("./src/socket/socket");
+const { initSocket } = require("./src/socket/socket");
 
 const PORT = process.env.PORT || 8002;
 const numCPUs = os.cpus().length;
@@ -17,8 +17,8 @@ if (cluster.isPrimary) {
     .then(() => {
       console.log("DB connected | PRIMARY");
 
-      // const startReminder = require("./src/confing/crons/projectReminder");
-      // startReminder.start(); // agar scheduled:false hai
+      const startReminder = require("./src/confing/crons/projectReminder");
+      startReminder.start(); // agar scheduled:false hai
     })
     .catch((err) => {
       console.error("Primary DB connection failed:", err.message);

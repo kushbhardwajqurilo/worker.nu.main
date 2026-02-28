@@ -69,4 +69,8 @@ const initSocket = (server) => {
   return io;
 };
 
-module.exports = initSocket;
+const getIo = () => {
+  if (!io) throw new Error("Socket not initialized");
+  return io;
+};
+module.exports = { initSocket, getIo };
