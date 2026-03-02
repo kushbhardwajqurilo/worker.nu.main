@@ -2951,13 +2951,12 @@ exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
     return next(new AppError("Date range missing", 400));
 
   /* ---------- DATE RANGE ---------- */
-  console.log(date);
-  const startDate = new Date(date.start);
-  startDate.setHours(0, 0, 0, 0);
+  const startDate = keepSameDateUTC(date.start);
+  // startDate.setHours(0, 0, 0, 0);
 
-  const endDate = new Date(date.end);
+  const endDate = keepSameDateUTC(date.end);
   endDate.setHours(23, 59, 59, 999);
-
+  // console.log({ startDate, endDate });
   /* ---------- DB FETCH ---------- */
 
   const [hoursData, projectData, organization] = await Promise.all([
