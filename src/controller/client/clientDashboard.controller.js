@@ -12,6 +12,7 @@ const calculateLateHoursByDate = require("../../utils/weekLateCount");
 const calculateLateByProjectEnd = require("../../utils/calculateLate");
 const getWeeksSinceCreated = require("../../utils/calculateWeekNo");
 const getWeekNumberFromWeekStart = require("../../utils/calenderWeekNumber");
+const keepSameDateUTC = require("../../utils/keepSameDate");
 // <--------- Single client own details  ----------->
 
 exports.getClientInformation = catchAsync(async (req, res, next) => {
@@ -1082,8 +1083,8 @@ exports.getAllHoursOfWorkerToClientController = catchAsync(
 
     // ✅ Custom Date Override
     if (req.body?.date?.length === 2) {
-      const startDate = new Date(req.body.date[0]);
-      const endDate = new Date(req.body.date[1]);
+      const startDate = keepSameDateUTC(req.body.date[0]);
+      const endDate = keepSameDateUTC(req.body.date[1]);
 
       if (!isNaN(startDate) && !isNaN(endDate)) {
         hoursFilter["project.project_date"] = {
@@ -1121,7 +1122,6 @@ exports.getAllHoursOfWorkerToClientController = catchAsync(
     /* ========================================================= */
     /* ===================== FETCH DATA ======================== */
     /* ========================================================= */
-    console.log("client hours filter query", hoursFilter);
     const hoursData = await hoursModel
       .find(hoursFilter)
       .populate([
