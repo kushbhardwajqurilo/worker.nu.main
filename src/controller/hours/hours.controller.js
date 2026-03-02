@@ -3069,7 +3069,7 @@ exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
       project: item.project,
 
       // ✅ DYNAMIC WEEK NUMBER
-      weekNumber: getWeeksCreated(item.worker_createdAt, startDate),
+      weekNumber: getWeekNumberFromWeekStart(startDate),
 
       task: projectData.project_details_for_workers.description,
       status: item.status,
