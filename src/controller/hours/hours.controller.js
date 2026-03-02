@@ -2009,7 +2009,12 @@ exports.addminDashboardStats = catchAsync(async (req, res, next) => {
                 _id: {
                   type: {
                     $cond: [
-                      { $eq: ["$is_complete", false] },
+                      {
+                        $and: [
+                          { $eq: ["$is_complete", false] },
+                          { $eq: ["$isDelete", false] },
+                        ],
+                      },
                       "current",
                       {
                         $cond: [
