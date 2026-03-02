@@ -1121,7 +1121,7 @@ exports.getAllHoursOfWorkerToClientController = catchAsync(
     /* ========================================================= */
     /* ===================== FETCH DATA ======================== */
     /* ========================================================= */
-
+    console.log("client hours filter query", hoursFilter);
     const hoursData = await hoursModel
       .find(hoursFilter)
       .populate([
