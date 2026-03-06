@@ -3471,7 +3471,7 @@ exports.LastAndThisWeekTotalHours = catchAsync(async (req, res, next) => {
     thisWeekResult[0]?.totalHours,
     thisWeekResult[0]?.breakTime,
   );
-  console.log("hoours", hours);
+
   /* ---------- RESPONSE ---------- */
   res.status(200).json({
     status: true,

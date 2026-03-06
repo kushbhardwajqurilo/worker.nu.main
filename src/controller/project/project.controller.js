@@ -1733,7 +1733,9 @@ exports.getProjectMinmumWords = catchAsync(async (req, res, next) => {
   }
   const words = await projectMode
     .findOne({ _id: p_id, tenantId })
-    .select("project_workers.comments.limit project_workers.photos.limit");
+    .select(
+      "project_workers.comments.limit project_workers.photos.limit project_details.project_start_date",
+    );
 
   return sendSuccess(
     res,
@@ -1741,6 +1743,7 @@ exports.getProjectMinmumWords = catchAsync(async (req, res, next) => {
     {
       limit: words.project_workers.comments.limit,
       photo_limit: words.project_workers.photos.limit,
+      project_start_date: words?.project_details.project_start_date,
     },
     200,
     true,

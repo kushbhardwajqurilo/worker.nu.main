@@ -36,7 +36,15 @@ const adminSchema = new mongoose.Schema({
   language: {
     type: String,
     enum: {
-      values: ["english", "lithuanian", "dutch", "german", "polish", "russian"],
+      values: [
+        "english",
+        "lithuanian",
+        "dutch",
+        "german",
+        "polish",
+        "russian",
+        "swedish",
+      ],
       message: "Language must be either English or Lithuanian",
     },
   },

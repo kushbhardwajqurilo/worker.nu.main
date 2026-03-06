@@ -13,7 +13,21 @@ const companyAlias = new mongoose.Schema({
     type: String,
     required: [true, "Company Address Required"],
   },
-  language: { type: String, enum: ["english", "lithuanian"] },
+  language: {
+    type: String,
+    enum: {
+      values: [
+        "english",
+        "lithuanian",
+        "dutch",
+        "german",
+        "polish",
+        "russian",
+        "swedish",
+      ],
+      message: "Language must be either English or Lithuanian",
+    },
+  },
 });
 
 const companyAliasModel = mongoose.model("compay_alias", companyAlias);
