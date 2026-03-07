@@ -1777,3 +1777,31 @@ exports.activeProjectController = catchAsync(async (req, res, next) => {
 });
 
 // active project end
+
+// get project start date
+exports.getProjectStartDate = catchAsync(async (req, res, next) => {
+  const { tenantId } = req;
+  const { p_id } = req.query;
+  if (!tenantId || !isValidCustomUUID(tenantId)) {
+    return next(new AppError("Tenant missing or Invalid"));
+  }
+  if (!p_id || !mongoose.Types.ObjectId.isValid(p_id)) {
+    return next(new AppError("Project id missing or Invalid"));
+  }
+  const project_date = await projectMode.findOne(
+    { _id: p_id, tenantId },
+    "project_details.project_start_date",
+  );
+  if (!project_date) {
+    return sendSuccess(res, "not found", {}, 200, true);
+  }
+  return sendSuccess(
+    res,
+    "success",
+    {
+      project_start_date: project_date.project_details.project_start_date,
+    },
+    200,
+    true,
+  );
+});

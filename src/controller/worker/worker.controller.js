@@ -4002,3 +4002,49 @@ exports.getWorkerDetailsById = catchAsync(async (req, res, next) => {
 
   return sendSuccess(res, "success", worker[0], 200, true);
 });
+
+// get worker documents
+exports.getWorkerDocuments = catchAsync(async (req, res, next) => {
+  const { worker_id, tenantId } = req;
+  if (!worker_id || !mongoose.Types.ObjectId.isValid(worker_id)) {
+    return next(new AppError("worker id missing or invalid", 400));
+  }
+  if (!tenantId || !isValidCustomUUID(tenantId)) {
+    return next(new AppError("Tenant id missing or invalid", 400));
+  }
+  const documents = await workerModel.findOne(
+    { _id: worker_id, tenantId },
+    "personal_information.documents",
+  );
+  if (!documents) {
+    return sendSuccess(res, "No Documents found", {}, 200, true);
+  }
+  return sendSuccess(
+    res,
+    "Documents found",
+    documents.personal_information.documents,
+    200,
+    true,
+  );
+});
+
+exports.getWorkerName = catchAsync(async (req, res, next) => {
+  const { worker_id, tenantId } = req;
+  if (!worker_id || !mongoose.Types.ObjectId.isValid(worker_id)) {
+    return next(new AppError("worker id missing or Invalid"));
+  }
+  if (!tenantId || !isValidCustomUUID(tenantId)) {
+    return next(new AppError("Tenant id missing and Invalid"));
+  }
+
+  const worker = await workerModel.findOne(
+    { _id: worker_id, tenantId },
+    "worker_personal_details",
+  );
+  if (!worker) {
+    return sendSuccess(res, "Worker name not found", {}, 200, true);
+  }
+  return sendSuccess(res, "success", {
+    name: `${worker?.worker_personal_details.firstName} ${worker?.worker_personal_details.lastName}`,
+  });
+});

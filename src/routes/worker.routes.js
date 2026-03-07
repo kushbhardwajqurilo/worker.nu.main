@@ -25,6 +25,8 @@ const {
   updateWorkerDataToRequest,
   makeActiveWorker,
   getWorkerDetailsById,
+  getWorkerDocuments,
+  getWorkerName,
 } = require("../controller/worker/worker.controller");
 const {
   authMiddeware,
@@ -198,5 +200,17 @@ workerRouter.get(
   authMiddeware,
   accessMiddleware("admin"),
   getWorkerDetailsById,
+);
+workerRouter.get(
+  "/worker_document",
+  workerAuthMiddleware,
+  accessMiddleware("worker"),
+  getWorkerDocuments,
+);
+workerRouter.get(
+  "/worker_name",
+  workerAuthMiddleware,
+  accessMiddleware("worker"),
+  getWorkerName,
 );
 module.exports = workerRouter;

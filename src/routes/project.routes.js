@@ -14,6 +14,7 @@ const {
   getProjectFolderFile,
   getProjectMinmumWords,
   activeProjectController,
+  getProjectStartDate,
 } = require("../controller/project/project.controller");
 const {
   authMiddeware,
@@ -121,6 +122,14 @@ projectRouter.get(
   workerOrAdminAuthMiddleware,
   accessMiddleware("worker", "admin"),
   getProjectMinmumWords,
+);
+
+// get project start date
+projectRouter.get(
+  "/project_date",
+  clientOrAdminAuthMiddleware,
+  accessMiddleware("admin", "client"),
+  getProjectStartDate,
 );
 
 module.exports = projectRouter;
