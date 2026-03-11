@@ -5,7 +5,6 @@
     <title>Weekly Time Sheet</title>
 
     <style>
-      /* ========== PRINT SETUP (VERY IMPORTANT) ========== */
       @page {
         size: A4;
         margin: 20mm;
@@ -18,13 +17,36 @@
         color: #000;
       }
 
-      /* ========== PAGE CONTROL (MOST IMPORTANT) ========== */
+      /* ---------- HEADER WITH LOGO ---------- */
+
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 20px;
+      }
+
+      .logo {
+        width: 120px;
+        height: auto;
+        display: block;
+        text-align: center;
+      }
+
+      .title {
+        flex: 1;
+        text-align: center;
+        font-size: 22px;
+        font-weight: bold;
+      }
+
+      /* ---------- PAGE ---------- */
+
       .page {
         border: 1px solid #000;
         padding: 20px;
         margin-bottom: 30px;
         box-sizing: border-box;
-
         page-break-after: always;
       }
 
@@ -32,14 +54,14 @@
         page-break-after: auto;
       }
 
-      /* ========== HEADER ========== */
       h1 {
         text-align: center;
         margin-bottom: 30px;
         font-size: 22px;
       }
 
-      /* ========== INFO ROWS ========== */
+      /* ---------- INFO ROWS ---------- */
+
       .row {
         display: flex;
         justify-content: space-between;
@@ -60,13 +82,13 @@
         box-sizing: border-box;
       }
 
-      /* ========== TABLE ========== */
+      /* ---------- TABLE ---------- */
+
       table {
         width: 100%;
         border-collapse: collapse;
         margin-top: 20px;
         font-size: 14px;
-
         page-break-inside: avoid;
       }
 
@@ -86,7 +108,8 @@
         font-weight: bold;
       }
 
-      /* ========== TOTAL ========== */
+      /* ---------- TOTAL ---------- */
+
       .total-box {
         display: flex;
         justify-content: flex-end;
@@ -103,7 +126,8 @@
         margin-left: 10px;
       }
 
-      /* ========== SIGNATURE ========== */
+      /* ---------- SIGNATURE ---------- */
+
       .sign-row {
         display: flex;
         justify-content: space-between;
@@ -112,7 +136,7 @@
       }
 
       .line {
-        height: 70px; /* signature ke liye fixed space */
+        height: 70px;
         width: 220px;
         margin-top: 10px;
       }
@@ -128,6 +152,13 @@
   </head>
 
   <body>
+    <!-- LOGO HEADER -->
+    <div class="header">
+      <img src="{{LOGO}}" class="logo" />
+      <!-- <div class="title">Weekly Time Sheet</div> -->
+      <!-- <div style="width: 120px"></div> -->
+    </div>
+
     {{PAGES}}
   </body>
 </html>

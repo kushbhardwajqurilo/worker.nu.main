@@ -3081,7 +3081,8 @@ exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
   const groupedData = [...workerMap.values()];
 
   /* ---------- HTML BUILD ---------- */
-
+  const logoUrl = `${req.protocol}://${req.get("host")}/uploads/logo.png`;
+  console.log(logoUrl);
   const template = await fs.promises.readFile(
     path.join(process.cwd(), "src/templates/weeklyTimeSheet.html"),
     "utf8",
@@ -3174,7 +3175,9 @@ exports.weeklyTimeSheetGenerate = catchAsync(async (req, res, next) => {
     })
     .join("");
 
-  const finalHtml = template.replace("{{PAGES}}", pagesHtml);
+  const finalHtml = template
+    .replace("{{LOGO}}", logoUrl)
+    .replace("{{PAGES}}", pagesHtml);
   const pdfBuffer = await generateTimesheetPDFBuffer(finalHtml);
 
   res.set({
@@ -3968,34 +3971,85 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
 
   const skip = (page - 1) * limit;
 
-  /* ---------- CURRENT + PREVIOUS 3 WEEKS ---------- */
+  const bodyStartDate = Array.isArray(req?.body?.date)
+    ? new Date(req?.body?.date[0])
+    : null;
+
+  const bodyEndDate = Array.isArray(req?.body?.date)
+    ? new Date(req?.body?.date[1])
+    : null;
+
+  if (bodyStartDate) bodyStartDate.setHours(0, 0, 0, 0);
+  if (bodyEndDate) bodyEndDate.setHours(23, 59, 59, 999);
+
+  /* ---------- WEEK GENERATION ---------- */
+
   const today = new Date();
   const day = today.getDay() === 0 ? 7 : today.getDay();
 
-  const baseWeekStart = new Date(today);
-  baseWeekStart.setDate(today.getDate() - day + 1);
-  baseWeekStart.setHours(0, 0, 0, 0);
-
   const weeks = [];
 
-  for (let i = 0; i <= 3; i++) {
-    const start = new Date(baseWeekStart);
-    start.setDate(baseWeekStart.getDate() - i * 7);
-    start.setHours(0, 0, 0, 0);
+  if (bodyStartDate && bodyEndDate) {
+    // 🔹 generate weeks between given range
+    let currentStart = new Date(bodyStartDate);
 
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
+    const startDay = currentStart.getDay() === 0 ? 7 : currentStart.getDay();
+    currentStart.setDate(currentStart.getDate() - startDay + 1);
+    currentStart.setHours(0, 0, 0, 0);
 
-    weeks.push({ start, end });
+    while (currentStart <= bodyEndDate) {
+      const start = new Date(currentStart);
+
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+
+      weeks.push({ start, end });
+
+      currentStart.setDate(currentStart.getDate() + 7);
+    }
+  } else {
+    const earliestProject = await projectMode
+      .findOne({
+        tenantId,
+        is_complete: false,
+        isDelete: false,
+      })
+      .sort({ "project_details.project_start_date": 1 }) // ascending = minimum date
+      .select("project_details.project_start_date ")
+      .lean();
+
+    // console.log("erly", earliestProject);
+    const totalWeeks = getWeeksSinceCreated(
+      earliestProject?.project_details?.project_start_date,
+      new Date(),
+    );
+    // console.log("total weeks", totalWeeks);
+    // // 🔹 current week + previous 3 weeks
+    const baseWeekStart = new Date(today);
+    baseWeekStart.setDate(today.getDate() - day + 1);
+    baseWeekStart.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i <= totalWeeks; i++) {
+      const start = new Date(baseWeekStart);
+      start.setDate(baseWeekStart.getDate() - i * 7);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+
+      weeks.push({ start, end });
+    }
   }
 
-  /* ---------- BUILD QUERY (project_date based) ---------- */
+  /* ---------- BUILD QUERY ---------- */
+
   const query = { tenantId };
 
   query["project.project_date"] = {
-    $gte: weeks[3].start,
-    $lte: weeks[0].end,
+    $gte: bodyStartDate ?? weeks[weeks.length - 1].start,
+    $lte: bodyEndDate ?? weeks[0].end,
   };
 
   if (req.body?.status) {
@@ -4013,6 +4067,8 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
       $in: req.body.projectIds.map((id) => new mongoose.Types.ObjectId(id)),
     };
   }
+
+  // console.log("query", query);
 
   /* ---------- FETCH DATA ---------- */
   const hoursData = await hoursModel
@@ -4033,7 +4089,6 @@ exports.getAllHoursOfWorkerController = catchAsync(async (req, res, next) => {
       },
     ])
     .lean();
-
   /* ---------- HELPERS ---------- */
   const formatHours = (decimalHours = 0, break_time = 0) => {
     // convert to total minutes
