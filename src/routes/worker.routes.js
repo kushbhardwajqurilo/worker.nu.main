@@ -27,6 +27,9 @@ const {
   getWorkerDetailsById,
   getWorkerDocuments,
   getWorkerName,
+  updatePersonalInformationDocuments,
+  addAdditionalInformationDocuments,
+  updateAdditionalInformationDocuments,
 } = require("../controller/worker/worker.controller");
 const {
   authMiddeware,
@@ -212,5 +215,28 @@ workerRouter.get(
   workerAuthMiddleware,
   accessMiddleware("worker"),
   getWorkerName,
+);
+
+// update worker personal information ducuments
+workerRouter.post(
+  "/update_personal_documents",
+  workerAuthMiddleware,
+  accessMiddleware("worker"),
+  uploadDocuments,
+  updatePersonalInformationDocuments,
+);
+workerRouter.post(
+  "/add_additional_information",
+  workerAuthMiddleware,
+  accessMiddleware("worker"),
+  uploadDocuments,
+  addAdditionalInformationDocuments,
+);
+workerRouter.patch(
+  "/update_additional_information",
+  workerAuthMiddleware,
+  accessMiddleware("worker"),
+  uploadDocuments,
+  updateAdditionalInformationDocuments,
 );
 module.exports = workerRouter;

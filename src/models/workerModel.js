@@ -73,6 +73,7 @@ const workerSchema = new mongoose.Schema(
             {
               folderName: { type: String },
               file: { type: String },
+              public_key: { type: String },
             },
           ],
           default: [],

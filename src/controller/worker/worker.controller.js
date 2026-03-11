@@ -30,7 +30,6 @@ const parseDottedObject = require("../../utils/parseObject");
 const getWeekRange = require("../../utils/weekRange");
 const keepSameDateUTC = require("../../utils/keepSameDate");
 const adminModel = require("../../models/authmodel/adminModel");
-
 // ----------------------------------------- ADMIN DASHBOARD API'S -----------------------------------------------
 
 // <---------- Add Worker Start Here ------------>
@@ -4031,10 +4030,10 @@ exports.getWorkerDocuments = catchAsync(async (req, res, next) => {
 exports.getWorkerName = catchAsync(async (req, res, next) => {
   const { worker_id, tenantId } = req;
   if (!worker_id || !mongoose.Types.ObjectId.isValid(worker_id)) {
-    return next(new AppError("worker id missing or Invalid"));
+    return next(new AppError("worker id missing or Invalid", 400));
   }
   if (!tenantId || !isValidCustomUUID(tenantId)) {
-    return next(new AppError("Tenant id missing and Invalid"));
+    return next(new AppError("Tenant id missing and Invalid", 400));
   }
 
   const worker = await workerModel.findOne(
@@ -4048,3 +4047,123 @@ exports.getWorkerName = catchAsync(async (req, res, next) => {
     name: `${worker?.worker_personal_details.firstName} ${worker?.worker_personal_details.lastName}`,
   });
 });
+
+// <------------- update personal information documents ---------->
+
+exports.updatePersonalInformationDocuments = catchAsync(
+  async (req, res, next) => {
+    const { tenantId, worker_id } = req;
+    const { doc_name } = req.body;
+    const doc_file = req.files[0];
+
+    if (!tenantId || !isValidCustomUUID(tenantId)) {
+      return next(new AppError("Tenant Missing Or Invalid", 400));
+    }
+    if (!worker_id || !mongoose.Types.ObjectId.isValid(worker_id)) {
+      return next(new AppError("Worker Missing Or Invalid", 400));
+    }
+    if (!doc_name) {
+      return next(new AppError("Document Name Require", 400));
+    }
+    if (!doc_file) {
+      return next(new AppError("file Required", 400));
+    }
+
+    const worker = await workerModel.findOne(
+      {
+        _id: worker_id,
+        tenantId,
+        [`personal_information.documents.${doc_name}`]: { $exists: true },
+      },
+      [`personal_information.documents.${doc_name}`],
+    );
+
+    worker.personal_information.documents[`${doc_name}`] = doc_file.path;
+    await worker.save();
+
+    return sendSuccess(res, "success", { url: doc_file }, 200, true);
+  },
+);
+// <------------- update personal information documents end ---------->
+
+// <------- add new addtional information like pdf or docs file -------->
+
+exports.addAdditionalInformationDocuments = catchAsync(
+  async (req, res, next) => {
+    const { tenantId, worker_id } = req;
+    if (!tenantId || !isValidCustomUUID(tenantId)) {
+      return next(new AppError("Tenant Missing Or Invalid", 400));
+    }
+    if (!worker_id || !mongoose.Types.ObjectId.isValid(worker_id)) {
+      return next(new AppError("Worker Missing Or Invalid", 400));
+    }
+    const file = req.files[0];
+    if (!file) {
+      return next(new AppError("file requried", 400));
+    }
+
+    const worker = await workerModel.updateOne(
+      { _id: worker_id, tenantId },
+      {
+        $push: {
+          "personal_information.documents.other_files": {
+            folderName: "other_files",
+            file: file.path,
+            public_key: file.public_key,
+          },
+        },
+      },
+    );
+    return sendSuccess(res, "success", {}, 200, true);
+  },
+);
+exports.updateAdditionalInformationDocuments = catchAsync(
+  async (req, res, next) => {
+    const { tenantId, worker_id } = req;
+
+    if (!tenantId || !isValidCustomUUID(tenantId)) {
+      return next(new AppError("Tenant Missing Or Invalid", 400));
+    }
+
+    if (!worker_id || !mongoose.Types.ObjectId.isValid(worker_id)) {
+      return next(new AppError("Worker Missing Or Invalid", 400));
+    }
+
+    const { pos } = req.query;
+    if (!pos) {
+      return next(new AppError("Position Missing", 400));
+    }
+
+    const position = Number(pos);
+    if (isNaN(position) || position < 0) {
+      return next(new AppError("Invalid position", 400));
+    }
+
+    const file = req.files[0];
+
+    const worker = await workerModel.findById(worker_id);
+
+    if (!worker) {
+      return next(new AppError("Worker not found", 404));
+    }
+
+    const other_file =
+      worker.personal_information.documents.other_files[position];
+
+    if (!other_file) {
+      return next(new AppError("File position not found", 404));
+    }
+    const public_key = other_file.public_key || null;
+    other_file.folderName = "other_files";
+    other_file.file = file.path;
+    other_file.public_key = file.public_key;
+
+    await worker.save();
+
+    if (public_key) {
+      await cloudinary.uploader.destroy(public_key);
+      return sendSuccess(res, "success", {}, 200, true);
+    }
+    return sendSuccess(res, "success", {}, 200, true);
+  },
+);
