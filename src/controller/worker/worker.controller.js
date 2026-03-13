@@ -4066,7 +4066,6 @@ exports.updatePersonalInformationDocuments = catchAsync(
       {
         _id: worker_id,
         tenantId,
-        [`personal_information.documents.${doc_name}`]: { $exists: true },
       },
       [`personal_information.documents.${doc_name}`],
     );
