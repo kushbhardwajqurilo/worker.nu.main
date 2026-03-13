@@ -1684,18 +1684,23 @@ exports.updateProjectController = catchAsync(async (req, res, next) => {
   /* ================= FINAL UPDATE ================= */
   const updateQuery = {};
 
-  if (Object.keys(setUpdate).length > 0) {
-    updateQuery.$set = setUpdate;
-  }
+  // if (Object.keys(setUpdate).length > 0) {
+  //   updateQuery.$set = setUpdate;
+  // }
 
-  if (Object.keys(pushUpdate).length > 0) {
-    updateQuery.$set = pushUpdate;
+  // if (Object.keys(pushUpdate).length > 0) {
+  //   updateQuery.$set = pushUpdate;
+  // }
+  if (Object.keys(setUpdate).length > 0 || Object.keys(pushUpdate).length > 0) {
+    updateQuery.$set = {
+      ...setUpdate,
+      ...pushUpdate,
+    };
   }
 
   if (Object.keys(updateQuery).length === 0) {
     return next(new AppError("Nothing to update", 400));
   }
-
   const project = await projectMode.findOneAndUpdate(
     { tenantId, _id: project_id },
     updateQuery,

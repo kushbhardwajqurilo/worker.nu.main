@@ -997,7 +997,7 @@ exports.isClientSign = catchAsync(async (req, res, next) => {
 exports.getAllHoursOfWorkerToClientController = catchAsync(
   async (req, res, next) => {
     const { tenantId, client_id } = req;
-
+    console.log("client", client_id);
     /* ---------- TENANT VALIDATION ---------- */
     if (!tenantId)
       return next(new AppError("Tenant Id missing in headers", 400));
@@ -1038,7 +1038,7 @@ exports.getAllHoursOfWorkerToClientController = catchAsync(
         true,
       );
     }
-
+    const projectIds = await projectMode.distinct("_id", projectFilter);
     /* ========================================================= */
     /* ================== WEEK CALCULATION ===================== */
     /* ========================================================= */
@@ -1071,6 +1071,7 @@ exports.getAllHoursOfWorkerToClientController = catchAsync(
     let hoursFilter = {
       tenantId,
       workerId: { $in: workerIds },
+      "project.projectId": { $in: projectIds },
     };
 
     let activeWeeks = weeks;
