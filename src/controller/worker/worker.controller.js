@@ -852,12 +852,9 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
           "other_files";
 
         if (exists) {
-          console.log("file path", file);
-
           documents.other_files[index] ??= {};
           documents.other_files[index].file = file.path;
           documents.other_files[index].folderName = folderName;
-          console.log("Other files after replace :", documents.other_files);
         } else {
           isOther_files = true;
           // ADD
@@ -891,12 +888,6 @@ exports.updateWorkerController = catchAsync(async (req, res, next) => {
   // ---------- FINAL UPDATE QUERY ----------
 
   if (isOther_files) {
-    console.log(
-      "IN IS OTHER FILES : ",
-      otherFilesToPush,
-      documents.other_files,
-    );
-
     documents.other_files = documents.other_files.filter(
       (item) => item.file !== null,
     );
@@ -1878,7 +1869,9 @@ exports.getAllProjectsToWorkerAddController = catchAsync(
     if (!isValidCustomUUID(tenantId)) {
       return next(new AppError("Invalid Tenant", 400));
     }
-    const projects = await projectMode.find({ tenantId }).lean();
+    const projects = await projectMode
+      .find({ tenantId, isDelete: { $ne: true } })
+      .lean();
     if (!projects || projects.length === 0) {
       return next(new AppError("No projects found", 400));
     }

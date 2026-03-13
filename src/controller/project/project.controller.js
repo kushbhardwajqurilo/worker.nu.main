@@ -1129,6 +1129,356 @@ exports.getSingleProjectController = catchAsync(async (req, res, next) => {
 
 //   return sendSuccess(res, "Project updated successfully", project, 200, true);
 // });
+// exports.updateProjectController = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+
+//   if (!tenantId || !isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid tenant", 400));
+//   }
+
+//   const { project_id } = req.query;
+//   if (!project_id) {
+//     return next(new AppError("Project id missing", 400));
+//   }
+
+//   /* ================= SAFE JSON PARSER ================= */
+//   const parseJSON = (value, field) => {
+//     try {
+//       if (!value) return undefined;
+//       return typeof value === "string" ? JSON.parse(value) : value;
+//     } catch {
+//       throw new AppError(`Invalid JSON in ${field}`, 400);
+//     }
+//   };
+
+//   /* ================= UPDATE OBJECTS ================= */
+//   const setUpdate = {};
+//   const pushUpdate = {};
+
+//   /* ================= NORMAL FIELDS (UNCHANGED) ================= */
+//   if (req.body.project_details) {
+//     setUpdate.project_details = parseJSON(
+//       req.body.project_details,
+//       "project_details",
+//     );
+//   }
+//   if (setUpdate.project_details.project_start_date) {
+//     setUpdate.project_details.project_start_date = keepSameDateUTC(
+//       setUpdate.project_details.project_start_date,
+//     );
+//   }
+//   if (req.body.daily_work_hour) {
+//     const dwh = parseJSON(req.body.daily_work_hour, "daily_work_hour");
+//     setUpdate.daily_work_hour = {
+//       shift_start_time: {
+//         hours: Number(dwh?.shift_start_time?.hours) || 0,
+//         minutes: Number(dwh?.shift_start_time?.minutes) || 0,
+//       },
+//       shift_end_time: {
+//         hours: Number(dwh?.shift_end_time?.hours) || 0,
+//         minutes: Number(dwh?.shift_end_time?.minutes) || 0,
+//       },
+//       break_time: Number(dwh?.break_time) || null,
+//     };
+//   }
+
+//   if (req.body.project_workers) {
+//     setUpdate.project_workers = parseJSON(
+//       req.body.project_workers,
+//       "project_workers",
+//     );
+//   }
+
+//   if (req.body.client_details) {
+//     setUpdate.client_details = parseJSON(
+//       req.body.client_details,
+//       "client_details",
+//     );
+//   }
+
+//   if (req.body.project_time_economical_details) {
+//     setUpdate.project_time_economical_details = parseJSON(
+//       req.body.project_time_economical_details,
+//       "project_time_economical_details",
+//     );
+//   }
+
+//   /* ================= DESCRIPTION / CONTACT (UNCHANGED) ================= */
+//   if (req.body.project_details_for_workers) {
+//     const pdw = parseJSON(
+//       req.body.project_details_for_workers,
+//       "project_details_for_workers",
+//     );
+
+//     if (pdw?.description !== undefined) {
+//       setUpdate["project_details_for_workers.description"] = pdw.description;
+//     }
+
+//     if (pdw?.contact_information) {
+//       setUpdate["project_details_for_workers.contact_information"] = {
+//         position: pdw.contact_information.position || null,
+//         phone_code: pdw.contact_information.phone_code || "Lithuania(+370)",
+//         phone_number: Number(pdw.contact_information.phone_number) || null,
+//       };
+//     }
+//   }
+
+//   /* ================= FILES & FOLDERS (PUSH ONLY) ================= */
+//   const filesToPush = [];
+//   const foldersMap = {};
+
+//   (req.files || []).forEach((file) => {
+//     /* ---------- NORMAL FILES ---------- */
+//     if (file.fieldname.startsWith("files.")) {
+//       filesToPush.push({ file_url: file.path });
+//     }
+
+//     /* ---------- FOLDER FILES ---------- */
+//     if (file.fieldname.startsWith("folders.")) {
+//       const parts = file.fieldname.split(".");
+//       const folderIndex = parts[1];
+
+//       if (!foldersMap[folderIndex]) {
+//         foldersMap[folderIndex] = {
+//           folder_name: req.body[`folders.${folderIndex}.folderName`] || null,
+//           folder_files: [],
+//         };
+//       }
+
+//       if (parts[2] === "files") {
+//         foldersMap[folderIndex].folder_files.push({
+//           file_url: file.path,
+//         });
+//       }
+//     }
+//   });
+
+//   /* ---------- PUSH OPERATIONS ---------- */
+//   if (filesToPush.length > 0) {
+//     pushUpdate["project_details_for_workers.files"] = {
+//       $each: filesToPush,
+//     };
+//   }
+
+//   if (Object.keys(foldersMap).length > 0) {
+//     pushUpdate["project_details_for_workers.folders"] = {
+//       $each: Object.values(foldersMap),
+//     };
+//   }
+
+//   /* ================= FINAL UPDATE ================= */
+//   const updateQuery = {};
+
+//   if (Object.keys(setUpdate).length > 0) {
+//     updateQuery.$set = setUpdate;
+//   }
+
+//   if (Object.keys(pushUpdate).length > 0) {
+//     updateQuery.$push = pushUpdate;
+//   }
+
+//   if (Object.keys(updateQuery).length === 0) {
+//     return next(new AppError("Nothing to update", 400));
+//   }
+
+//   const project = await projectMode.findOneAndUpdate(
+//     { tenantId, _id: project_id },
+//     updateQuery,
+//     { new: true, runValidators: true },
+//   );
+
+//   if (!project) {
+//     return next(new AppError("Project not found", 404));
+//   }
+
+//   return sendSuccess(res, "Project updated successfully", project, 200, true);
+// });
+
+// exports.updateProjectController = catchAsync(async (req, res, next) => {
+//   const { tenantId } = req;
+
+//   if (!tenantId || !isValidCustomUUID(tenantId)) {
+//     return next(new AppError("Invalid tenant", 400));
+//   }
+
+//   const { project_id } = req.query;
+//   if (!project_id) {
+//     return next(new AppError("Project id missing", 400));
+//   }
+
+//   /* ================= SAFE JSON PARSER ================= */
+//   const parseJSON = (value, field) => {
+//     try {
+//       if (!value) return undefined;
+//       return typeof value === "string" ? JSON.parse(value) : value;
+//     } catch {
+//       throw new AppError(`Invalid JSON in ${field}`, 400);
+//     }
+//   };
+
+//   /* ================= UPDATE OBJECTS ================= */
+//   const setUpdate = {};
+//   const pushUpdate = {};
+
+//   /* ================= NORMAL FIELDS (UNCHANGED) ================= */
+//   if (req.body.project_details) {
+//     setUpdate.project_details = parseJSON(
+//       req.body.project_details,
+//       "project_details",
+//     );
+//   }
+//   if (setUpdate.project_details.project_start_date) {
+//     setUpdate.project_details.project_start_date = keepSameDateUTC(
+//       setUpdate.project_details.project_start_date,
+//     );
+//   }
+//   if (req.body.daily_work_hour) {
+//     const dwh = parseJSON(req.body.daily_work_hour, "daily_work_hour");
+//     setUpdate.daily_work_hour = {
+//       shift_start_time: {
+//         hours: Number(dwh?.shift_start_time?.hours) || 0,
+//         minutes: Number(dwh?.shift_start_time?.minutes) || 0,
+//       },
+//       shift_end_time: {
+//         hours: Number(dwh?.shift_end_time?.hours) || 0,
+//         minutes: Number(dwh?.shift_end_time?.minutes) || 0,
+//       },
+//       break_time: Number(dwh?.break_time) || null,
+//     };
+//   }
+
+//   if (req.body.project_workers) {
+//     setUpdate.project_workers = parseJSON(
+//       req.body.project_workers,
+//       "project_workers",
+//     );
+//   }
+
+//   if (req.body.client_details) {
+//     setUpdate.client_details = parseJSON(
+//       req.body.client_details,
+//       "client_details",
+//     );
+//   }
+
+//   if (req.body.project_time_economical_details) {
+//     setUpdate.project_time_economical_details = parseJSON(
+//       req.body.project_time_economical_details,
+//       "project_time_economical_details",
+//     );
+//   }
+
+//   /* ================= DESCRIPTION / CONTACT (UNCHANGED) ================= */
+//   if (req.body.project_details_for_workers) {
+//     const pdw = parseJSON(
+//       req.body.project_details_for_workers,
+//       "project_details_for_workers",
+//     );
+
+//     if (pdw?.description !== undefined) {
+//       setUpdate["project_details_for_workers.description"] = pdw.description;
+//     }
+
+//     if (pdw?.contact_information) {
+//       setUpdate["project_details_for_workers.contact_information"] = {
+//         position: pdw.contact_information.position || null,
+//         phone_code: pdw.contact_information.phone_code || "Lithuania(+370)",
+//         phone_number: Number(pdw.contact_information.phone_number) || null,
+//       };
+//     }
+//   }
+
+//   /* ================= FILES & FOLDERS (PUSH ONLY) ================= */
+//   const normalFIles = parseJSON(req?.body?.project_details_for_workers);
+//   let worker_files = normalFIles?.files;
+//   console.log("normal files", worker_files);
+//   const filesToPush = [];
+//   const foldersMap = {};
+
+//   (req.files || []).forEach((file) => {
+//     /* ---------- NORMAL FILES ---------- */
+//     if (file.fieldname.startsWith("files.")) {
+//       const file_pos = file.fieldname.split(".")[1];
+//       console.log("Filesss", file);
+//       worker_files[file_pos] = file.path;
+//       worker_files = worker_files.map((val, pos) => {
+//         if (typeof val === "string") {
+//           return {
+//             file_url: val,
+//           };
+//         }
+//         if (typeof val === "object") {
+//           return {
+//             file_url: val?.file,
+//           };
+//         }
+//       });
+//       // console.log("added file url", { pos: file_pos, urls: worker_files });
+//       // filesToPush.push({ file_url: file.path });
+//     }
+
+//     /* ---------- FOLDER FILES ---------- */
+//     if (file.fieldname.startsWith("folders.")) {
+//       const parts = file.fieldname.split(".");
+//       const folderIndex = parts[1];
+
+//       if (!foldersMap[folderIndex]) {
+//         foldersMap[folderIndex] = {
+//           folder_name: req.body[`folders.${folderIndex}.folderName`] || null,
+//           folder_files: [],
+//         };
+//       }
+
+//       if (parts[2] === "files") {
+//         foldersMap[folderIndex].folder_files.push({
+//           file_url: file.path,
+//         });
+//       }
+//     }
+//   });
+
+//   /* ---------- PUSH OPERATIONS ---------- */
+//   if (worker_files.length > 0 && req.files.length > 0) {
+//     pushUpdate["project_details_for_workers.files"] = worker_files;
+//   }
+//   if (Array.isArray(worker_files) && worker_files.length === 0) {
+//     worker_files = [];
+//     pushUpdate["project_details_for_workers.files"] = [];
+//   }
+//   if (Object.keys(foldersMap).length > 0) {
+//     pushUpdate["project_details_for_workers.folders"] = {
+//       $each: Object.values(foldersMap),
+//     };
+//   }
+//   console.log("worker_file", worker_files);
+//   /* ================= FINAL UPDATE ================= */
+//   const updateQuery = {};
+
+//   if (Object.keys(setUpdate).length > 0) {
+//     updateQuery.$set = setUpdate;
+//   }
+
+//   if (Object.keys(pushUpdate).length > 0) {
+//     updateQuery.$set = pushUpdate;
+//   }
+
+//   if (Object.keys(updateQuery).length === 0) {
+//     return next(new AppError("Nothing to update", 400));
+//   }
+
+//   const project = await projectMode.findOneAndUpdate(
+//     { tenantId, _id: project_id },
+//     updateQuery,
+//     { new: true, runValidators: true },
+//   );
+
+//   if (!project) {
+//     return next(new AppError("Project not found", 404));
+//   }
+
+//   return sendSuccess(res, "Project updated successfully", project, 200, true);
+// });
+
 exports.updateProjectController = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
 
@@ -1224,47 +1574,112 @@ exports.updateProjectController = catchAsync(async (req, res, next) => {
   }
 
   /* ================= FILES & FOLDERS (PUSH ONLY) ================= */
+  const normalFIles = parseJSON(req?.body?.project_details_for_workers);
+  let worker_files = normalFIles?.files;
+
   const filesToPush = [];
   const foldersMap = {};
 
-  (req.files || []).forEach((file) => {
-    /* ---------- NORMAL FILES ---------- */
+  // (req.files || []).forEach((file) => {
+  //   /* ---------- NORMAL FILES ---------- */
+  //   if (file.fieldname.startsWith("files.")) {
+  //     const file_pos = file.fieldname.split(".")[1];
+  //     console.log("Filesss", file);
+  //     worker_files[file_pos] = file.path;
+  //     worker_files = worker_files.map((val, pos) => {
+  //       if (typeof val === "string") {
+  //         return {
+  //           file_url: val,
+  //         };
+  //       }
+  //       if (typeof val === "object") {
+  //         return {
+  //           file_url: val?.file,
+  //         };
+  //       }
+  //     });
+  //     // console.log("added file url", { pos: file_pos, urls: worker_files });
+  //     // filesToPush.push({ file_url: file.path });
+  //   }
+
+  //   /* ---------- FOLDER FILES ---------- */
+  //   if (file.fieldname.startsWith("folders.")) {
+  //     const parts = file.fieldname.split(".");
+  //     const folderIndex = parts[1];
+
+  //     if (!foldersMap[folderIndex]) {
+  //       foldersMap[folderIndex] = {
+  //         folder_name: req.body[`folders.${folderIndex}.folderName`] || null,
+  //         folder_files: [],
+  //       };
+  //     }
+
+  //     if (parts[2] === "files") {
+  //       foldersMap[folderIndex].folder_files.push({
+  //         file_url: file.path,
+  //       });
+  //     }
+  //   }
+  // });
+  let pos = 0;
+  let filesArray = req?.files?.map((file) => {
     if (file.fieldname.startsWith("files.")) {
-      filesToPush.push({ file_url: file.path });
+      return file;
     }
+  });
+  let filesArrayLength = filesArray.length;
 
-    /* ---------- FOLDER FILES ---------- */
-    if (file.fieldname.startsWith("folders.")) {
-      const parts = file.fieldname.split(".");
-      const folderIndex = parts[1];
-
-      if (!foldersMap[folderIndex]) {
-        foldersMap[folderIndex] = {
-          folder_name: req.body[`folders.${folderIndex}.folderName`] || null,
-          folder_files: [],
+  worker_files = worker_files.map((eachFile) => {
+    if (typeof eachFile === "string") {
+      return {
+        file_url: eachFile,
+      };
+    }
+    if (typeof eachFile === "object") {
+      if (pos < filesArrayLength) {
+        let temp = {
+          file_url: filesArray[pos].path,
         };
-      }
-
-      if (parts[2] === "files") {
-        foldersMap[folderIndex].folder_files.push({
-          file_url: file.path,
-        });
+        pos++;
+        return temp;
       }
     }
   });
 
-  /* ---------- PUSH OPERATIONS ---------- */
-  if (filesToPush.length > 0) {
-    pushUpdate["project_details_for_workers.files"] = {
-      $each: filesToPush,
-    };
-  }
+  const regex = /^folders\.(\d+)\.files\.\d+$/;
 
-  if (Object.keys(foldersMap).length > 0) {
-    pushUpdate["project_details_for_workers.folders"] = {
-      $each: Object.values(foldersMap),
+  const folderArray = (req?.files || []).reduce((acc, file) => {
+    const match = file.fieldname.match(regex);
+
+    if (match) {
+      const folderIndex = Number(match[1]);
+
+      acc[folderIndex] ??= [];
+      acc[folderIndex].push(file.path);
+    }
+
+    return acc;
+  }, []);
+
+  let workerFolderFiles = normalFIles?.folders;
+
+  workerFolderFiles = workerFolderFiles?.map((folder, index) => {
+    let pos = 0;
+
+    return {
+      folder_name: folder.folderName,
+      folder_files: folder?.files?.map((file) => ({
+        file_url:
+          typeof file === "string"
+            ? file
+            : (folderArray[index]?.[pos++] ?? null),
+      })),
     };
-  }
+  });
+  /* ---------- PUSH OPERATIONS ---------- */
+
+  pushUpdate["project_details_for_workers.files"] = worker_files;
+  pushUpdate["project_details_for_workers.folders"] = workerFolderFiles;
 
   /* ================= FINAL UPDATE ================= */
   const updateQuery = {};
@@ -1274,7 +1689,7 @@ exports.updateProjectController = catchAsync(async (req, res, next) => {
   }
 
   if (Object.keys(pushUpdate).length > 0) {
-    updateQuery.$push = pushUpdate;
+    updateQuery.$set = pushUpdate;
   }
 
   if (Object.keys(updateQuery).length === 0) {
@@ -1293,7 +1708,6 @@ exports.updateProjectController = catchAsync(async (req, res, next) => {
 
   return sendSuccess(res, "Project updated successfully", project, 200, true);
 });
-
 // <----- update project end --------->
 
 // <----- delete project start --------->
@@ -1387,7 +1801,7 @@ exports.addWorkerInProject = catchAsync(async (req, res, next) => {
 exports.workerList = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
   const { p_id } = req.query;
-  console.log(p_id);
+
   if (!tenantId) {
     return next(new AppError("tenant-id missing in headers", 400));
   }
@@ -1686,7 +2100,6 @@ exports.projectWorkerList = catchAsync(async (req, res, next) => {
     select:
       "_id worker_personal_details.firstName worker_personal_details.lastName",
   });
-  console.log("projectData", projectData);
 });
 
 // get project folder data
