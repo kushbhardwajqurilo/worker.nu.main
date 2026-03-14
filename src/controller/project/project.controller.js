@@ -1948,17 +1948,55 @@ exports.clientList = catchAsync(async (req, res, next) => {
 exports.getProjectPictures = catchAsync(async (req, res, next) => {
   const { tenantId } = req;
   const { p_id } = req.query;
+
   if (!tenantId) return next(new AppError("tenant-id missing", 400));
   if (!isValidCustomUUID(tenantId)) {
     return next(new AppError("Invalid Tenant-Id", 400));
   }
 
+  // ================= PAGINATION =================
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 10;
+  const skip = (page - 1) * limit;
+
+  // ================= QUERY =================
+  const query = {
+    tenantId,
+    "project.projectId": p_id,
+    is_active: { $ne: false },
+  };
+
+  // ================= TOTAL COUNT =================
+  const totalCount = await hoursModel.countDocuments(query);
+
+  if (totalCount === 0) {
+    return sendSuccess(res, "project pictures not found", [], 200, true);
+  }
+
+  const totalPage = Math.ceil(totalCount / limit);
+
+  if (page > totalPage) {
+    return sendSuccess(
+      res,
+      "No page found",
+      {
+        total: totalCount,
+        page,
+        limit,
+        totalPage,
+        data: [],
+      },
+      200,
+      true,
+    );
+  }
+
+  // ================= FETCH DATA =================
   const worker_hours = await hoursModel
-    .find({
-      tenantId,
-      "project.projectId": p_id,
-      is_active: { $ne: false },
-    })
+    .find(query)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
     .populate([
       {
         path: "workerId",
@@ -1967,11 +2005,10 @@ exports.getProjectPictures = catchAsync(async (req, res, next) => {
     ])
     .select("project workerId total_hours comments images createdAt")
     .lean();
-  if (!worker_hours) {
-    return sendSuccess(res, "project pictures not found", {}, 200, true);
-  }
-  const filterDataa = worker_hours.map(
-    ({ workerId, createdAt, project, images, ...rest }) => ({
+
+  const filterData = worker_hours.map(
+    ({ workerId, createdAt, project, images, ...rest }, index) => ({
+      sr_no: (page - 1) * limit + index + 1,
       ...rest,
       date: project.project_date,
       worker: workerId
@@ -1986,7 +2023,21 @@ exports.getProjectPictures = catchAsync(async (req, res, next) => {
         : [],
     }),
   );
-  return sendSuccess(res, "project picture found", filterDataa, 200, true);
+
+  // ================= RESPONSE =================
+  return sendSuccess(
+    res,
+    "project picture found",
+    {
+      total: totalCount,
+      page,
+      limit,
+      totalPage,
+      filterData,
+    },
+    200,
+    true,
+  );
 });
 
 exports.markAsComplete = catchAsync(async (req, res, next) => {

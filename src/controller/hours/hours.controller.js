@@ -218,7 +218,7 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
   if (parsedProject.project_date) {
     parsedProject.project_date = keepSameDateUTC(parsedProject.project_date);
   }
-  const parsedReason = lateReason === "string" ? safeParse(lateReason) : "";
+  const parsedReason = lateReason ? safeParse(lateReason) : "";
   const parsedStartHours = safeParse(start_working_hours);
   const parsedFinishHours = safeParse(finish_hours);
   const parseComments = safeParse(comments);
@@ -281,7 +281,7 @@ exports.createWorkerHours = catchAsync(async (req, res, next) => {
     lateReason: parsedReason,
     createdBy: req.role,
   };
-
+  console.log("payload", payload);
   /* ---------- ATTACH IMAGES (DYNAMIC) ---------- */
   if (files.length > 0) {
     payload.images = files.map((file) => ({
